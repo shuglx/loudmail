@@ -1,0 +1,29 @@
+# 依赖与构建产物
+node_modules/
+dist/
+dist-deb/
+dist-dmg/
+.vite/
+.ci-cache/
+
+# Rust / Tauri
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# 本地环境与系统文件
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+
+# 本地参考与临时验证
+ref/
+targetosinfo.txt
+.x11test/
+.x11check/
+.trae-html-share-packages/
+
+# 设计文档与原型（本地保留，不入库）
+/doc/

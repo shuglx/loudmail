@@ -259,8 +259,8 @@ pub fn test_connection(host: &str, port: u16, mock: bool) -> TestConnectionResul
                 ok: true,
                 ms: 1,
                 server_info: Some(ServerInfo {
-                    name: "Mock".into(),
-                    version: "0.1.0".into(),
+                    name: "Mock MailBox".into(),
+                    version: String::new(),
                 }),
                 error: None,
             },

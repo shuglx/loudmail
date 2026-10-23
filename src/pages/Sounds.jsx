@@ -4,7 +4,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import { PlayIcon, SearchIcon, StopIcon, UploadIcon } from '../icons';
 
-const sourceLabel = { builtin: '内置', upload: '上传', record: '录音', tts: '文本' };
+const sourceLabel = { builtin: '内置', upload: '上传', record: '录音', tts: 'TTS' };
 
 const isBuiltin = (sound) => sound.source === 'builtin';
 
@@ -365,7 +365,12 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
         {visible.map((sound) => {
           const playing = playingId === sound.id;
           return (
-            <div className={`sound-card${playing ? ' playing' : ''}`} key={sound.id}>
+            <div
+              className={`sound-card${playing ? ' playing' : ''}${
+                isBuiltin(sound) ? ' builtin' : ''
+              }`}
+              key={sound.id}
+            >
               <div className="sound-top">
                 <button
                   className="play-btn"
@@ -391,25 +396,22 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                     <i />
                   </span>
                 ) : null}
+                {isBuiltin(sound) ? null : (
+                  <div className="sound-actions">
+                    <button
+                      onClick={() => {
+                        setRenameTarget(sound);
+                        setRenameValue(sound.name);
+                      }}
+                    >
+                      重命名
+                    </button>
+                    <button className="danger" onClick={() => setDeleteTarget(sound)}>
+                      删除
+                    </button>
+                  </div>
+                )}
               </div>
-              {isBuiltin(sound) ? null : (
-                <div className="sound-actions">
-                  <button
-                    onClick={() => {
-                      setRenameTarget(sound);
-                      setRenameValue(sound.name);
-                    }}
-                  >
-                    重命名
-                  </button>
-                  <button
-                    className="danger"
-                    onClick={() => setDeleteTarget(sound)}
-                  >
-                    删除
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
@@ -649,8 +651,10 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                           <b>人声</b>
                           <span>{formatDuration(voice.durationMs)}</span>
                         </>
+                      ) : mode === 'record' ? (
+                        '待录制'
                       ) : (
-                        '待录制 / 生成'
+                        '待生成'
                       )}
                     </div>
                   </div>

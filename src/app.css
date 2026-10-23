@@ -542,8 +542,9 @@ button:focus {
   white-space: nowrap;
 }
 code.keyword {
-  font-family: var(--mono);
-  font-size: 11px;
+  /* 关键词可能含中文，用正文字体避免与其它文字不一致 */
+  font-family: var(--font);
+  font-size: 11.5px;
   background: var(--chip);
   padding: 3px 7px;
   border-radius: 5px;
@@ -847,10 +848,25 @@ select.control:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, transform 0.15s;
 }
 .sound-card:hover {
-  border-color: #d8d8dd;
+  border-color: #cfcfd8;
+  box-shadow: 0 3px 12px rgba(10, 10, 12, 0.06);
+  transform: translateY(-1px);
+}
+/* 内置语音用浅绿底，呼应绿色状态色，同时与页面灰底区分 */
+.sound-card.builtin {
+  background: #eef8f3;
+  border-color: #dceee5;
+}
+.sound-card.builtin:hover {
+  background: #e6f5ee;
+  border-color: #c6e5d7;
+  box-shadow: 0 3px 12px rgba(18, 128, 92, 0.08);
+}
+.sound-card.builtin .tag {
+  background: #dff1e9;
 }
 .sound-card.playing {
   border-color: #c9c9cf;
@@ -901,34 +917,48 @@ select.control:focus {
 }
 .sound-meta {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 8px;
   font-size: 11px;
   color: var(--muted);
+  min-height: 22px;
+}
+.sound-meta > span:first-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sound-actions {
   display: flex;
-  gap: 2px;
-  border-top: 1px solid var(--line);
-  padding-top: 9px;
-  margin-top: auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .sound-actions button {
-  border: none;
-  background: none;
-  font-size: 11px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  font-size: 10.5px;
   color: var(--muted);
-  padding: 4px 6px;
-  border-radius: 5px;
+  border-radius: 6px;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
 .sound-actions button:hover {
   background: var(--hover);
   color: var(--ink);
+  border-color: #d4d4d9;
+}
+.sound-actions button.danger {
+  color: var(--red);
+  border-color: #f2c9c5;
 }
 .sound-actions button.danger:hover {
   color: var(--red);
   background: var(--red-bg);
+  border-color: #edb5b0;
 }
 .tag {
   display: inline-flex;
@@ -1410,16 +1440,19 @@ select.control:focus {
   line-height: 1.5;
 }
 .segmented {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   overflow: hidden;
 }
 .segmented button {
+  flex: 1;
+  min-width: 0;
   border: none;
   background: #fff;
   height: 32px;
-  padding: 0 18px;
+  padding: 0 10px;
   font-size: 12px;
   color: var(--muted);
   border-right: 1px solid var(--line-strong);
@@ -1657,6 +1690,17 @@ select.control:focus {
   margin-top: auto;
   padding-top: 14px;
 }
+/* 录音 / 文本转语音两个面板等高，左右列卡片一并撑满，切换时高度不变 */
+.new-panel .compose-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.new-panel .compose-cols {
+  flex: 1;
+  min-height: 0;
+}
 .compose-cols {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
@@ -1713,13 +1757,15 @@ select.control:focus {
   padding: 0 4px;
 }
 .ringtone-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  align-content: start;
 }
 .ringtone-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  min-width: 0;
   height: 28px;
   border: 1px solid var(--line-strong);
   background: #fff;
@@ -1728,6 +1774,8 @@ select.control:focus {
 }
 button.ringtone-item {
   padding: 0 10px;
+  /* flex 容器里 text-align 不生效，需显式居中主轴内容 */
+  justify-content: center;
   color: var(--text);
   font-size: 11.5px;
 }
@@ -1737,12 +1785,18 @@ button.ringtone-item {
   color: #fff;
 }
 .ringtone-item .ringtone-name {
+  flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   height: 100%;
   padding: 0 9px;
   font-size: 11.5px;
   color: inherit;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ringtone-item .ringtone-play {
   border: none;
@@ -1935,8 +1989,9 @@ button.ringtone-item {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 10.5px;
+  /* 未选择时会显示中文占位，统一用正文字体 */
+  font-family: var(--font);
+  font-size: 11px;
   color: var(--muted-2);
 }
 .form-error.inline {

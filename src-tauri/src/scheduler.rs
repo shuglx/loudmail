@@ -76,8 +76,8 @@ fn scan(
         let source = mock.get_or_insert_with(MockSource::new);
         state.set_runtime(RuntimeStatus {
             connected: true,
-            server_name: Some("Mock".into()),
-            server_version: Some("0.1.0".into()),
+            server_name: Some("Mock MailBox".into()),
+            server_version: None,
             last_error: None,
             mock: true,
         });

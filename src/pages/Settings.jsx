@@ -380,9 +380,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                     <ExternalIcon size={12} />
                   </button>
                 </div>
-                <small>
-                  版本 {appInfo?.version || '0.1.0'}
-                </small>
+                <small>版本 {appInfo?.version || '—'}</small>
               </div>
               <button className="btn btn-danger" onClick={() => api.quitApp()}>
                 退出应用
@@ -417,7 +415,9 @@ function TestResult({ result }) {
           <b>SSE 握手 + initialize</b>
           <small>
             {result.handshake.error ||
-              (server ? `${server.name} ${server.version}` : '返回 serverInfo')}
+              (server
+                ? [server.name, server.version].filter(Boolean).join(' ')
+                : '返回 serverInfo')}
           </small>
         </span>
         <span className="step-ms">
@@ -426,7 +426,9 @@ function TestResult({ result }) {
       </div>
       <div className={`test-banner${result.overall ? '' : ' fail'}`}>
         {result.overall
-          ? `PASS · 握手返回 ${server?.name || 'CoremailAir'} ${server?.version || ''}`
+          ? `PASS · 握手返回 ${[server?.name || 'CoremailAir', server?.version]
+              .filter(Boolean)
+              .join(' ')}`
           : `FAIL · ${result.handshake.error || result.tcp.error || '连接失败'}`}
       </div>
     </div>

@@ -18,9 +18,7 @@ Thumbs.db
 .env
 .env.*
 
-# 本地参考与临时验证
-ref/
-targetosinfo.txt
+# 临时验证
 .x11test/
 .x11check/
 .trae-html-share-packages/

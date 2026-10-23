@@ -54,7 +54,7 @@ LoudMail 把"盯邮件"这件事自动化：**匹配规则 → 轮询检索 → 
 **银河麒麟 / Ubuntu（ARM64）**
 
 ```bash
-sudo dpkg -i loudmail_1.0.0_arm64.deb
+sudo dpkg -i loudmail_x.y.z_arm64.deb
 # 依赖 WebKitGTK 4.0 / GTK3 等系统自带库，如缺依赖可执行: sudo apt -f install
 ```
 

@@ -11,6 +11,8 @@ RUN apt-get update -o Acquire::Retries=5 \
  && apt-get install -y --no-install-recommends --allow-downgrades \
       -o Acquire::Retries=5 \
       build-essential \
+      software-properties-common \
+      gnupg \
       curl \
       pkg-config \
       file \
@@ -26,6 +28,34 @@ RUN apt-get update -o Acquire::Retries=5 \
       libappindicator3-dev \
       librsvg2-dev \
       libasound2-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# 新版静态 libstdc++（解决 sherpa-onnx 预编译库的 undefined reference）
+#
+# sherpa-onnx 的 linux-aarch64 预编译静态库是在 GCC 12+ 环境里编出来的，引用了
+#   std::__cxx11::basic_stringbuf<...>::str() const &
+#   std::__exception_ptr::exception_ptr::_M_release/_M_addref
+#   std::__throw_bad_array_new_length
+# 等 focal（GCC 9，libstdc++ 6.0.28）根本没有的符号，链接必然失败。
+#
+# ubuntu-toolchain-r PPA 里的 gcc-14 仍是按 focal 的 glibc 2.31 编的，这里只取它的
+# 静态库 libstdc++.a 顶掉 GCC 9 的那一份，并删掉 GCC 9 的 libstdc++.so 链接脚本，
+# 使 `-lstdc++` 一定命中新版静态库：
+#   1) 链接期能补齐上述新符号；
+#   2) 静态链接后产物不再依赖目标机 libstdc++ 版本，麒麟 V10 SP1 的 6.0.28 照跑。
+# ---------------------------------------------------------------------------
+RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+ && apt-get update -o Acquire::Retries=5 \
+ && apt-get install -y --no-install-recommends -o Acquire::Retries=5 g++-14 \
+ && NEWLIB="$(dirname "$(g++-14 -print-libgcc-file-name)")" \
+ && OLDLIB="$(dirname "$(gcc -print-libgcc-file-name)")" \
+ && echo "新 libstdc++: $NEWLIB/libstdc++.a -> 旧目录: $OLDLIB" \
+ && test -f "$NEWLIB/libstdc++.a" \
+ && cp "$NEWLIB/libstdc++.a" "$OLDLIB/libstdc++.a" \
+ && nm --defined-only "$OLDLIB/libstdc++.a" | grep -q "_ZNSt15__exception_ptr13exception_ptr10_M_releaseEv" \
+ && echo "校验通过: 静态 libstdc++ 含 __exception_ptr 符号" \
+ && rm -f "$OLDLIB/libstdc++.so" \
  && rm -rf /var/lib/apt/lists/*
 
 # Rust 工具链

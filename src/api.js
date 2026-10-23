@@ -41,6 +41,8 @@ export const api = {
   log: (level, message) => invoke('cmd_log', { level, message }),
   hideWindow: () => invoke('cmd_hide_window'),
   minimizeWindow: () => invoke('cmd_minimize_window'),
+  toggleMaximizeWindow: () => invoke('cmd_toggle_maximize_window'),
+  isWindowMaximized: () => invoke('cmd_is_window_maximized'),
   showWindow: () => invoke('cmd_show_window'),
   quitApp: () => invoke('cmd_quit_app'),
 };

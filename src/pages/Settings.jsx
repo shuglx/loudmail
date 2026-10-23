@@ -256,8 +256,8 @@ export default function Settings({ config, status, flash, onConfigChange }) {
               <>
                 <div className="setting-row">
                   <div className="label">
-                    <b>使用在线服务</b>
-                    <small>开启后使用微软语音服务，需联网；关闭则使用本地模型</small>
+                    <b>使用在线语音</b>
+                    <small>开启后使用微软语音服务需要联网环境，关闭时则使用本地TTS模型</small>
                   </div>
                   <Switch
                     checked={tts.provider === 'edge'}
@@ -271,7 +271,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                   <div className="setting-row">
                     <div className="label">
                       <b>音色选择</b>
-                      <small>选择男声（云扬）或女声（晓晓）</small>
+                      <small>选择配音性别</small>
                     </div>
                     <select
                       className="control"

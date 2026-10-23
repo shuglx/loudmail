@@ -86,7 +86,7 @@ fn main() {
             let paths = store::init(root).map_err(|e| {
                 std::io::Error::new(std::io::ErrorKind::Other, e)
             })?;
-            logfile::init(&paths.logs_dir);
+            logfile::init(&paths.logs_dir, &app.package_info().version.to_string());
             logfile::install_panic_hook();
             logfile::info(format!("数据目录: {}", paths.root.display()));
 
@@ -152,6 +152,8 @@ fn main() {
             commands::settings::cmd_log,
             commands::settings::cmd_hide_window,
             commands::settings::cmd_minimize_window,
+            commands::settings::cmd_toggle_maximize_window,
+            commands::settings::cmd_is_window_maximized,
             commands::settings::cmd_show_window,
             commands::settings::cmd_quit_app,
         ])

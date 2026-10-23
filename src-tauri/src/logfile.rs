@@ -12,16 +12,13 @@ const MAX_BYTES: u64 = 2 * 1024 * 1024;
 static SINK: Lazy<Mutex<Option<File>>> = Lazy::new(|| Mutex::new(None));
 static LOG_PATH: Lazy<Mutex<Option<PathBuf>>> = Lazy::new(|| Mutex::new(None));
 
-pub fn init(dir: &Path) {
+pub fn init(dir: &Path, version: &str) {
     let _ = std::fs::create_dir_all(dir);
     let path = dir.join(LOG_FILE);
     rotate_if_needed(&path);
     *SINK.lock().unwrap() = OpenOptions::new().create(true).append(true).open(&path).ok();
     *LOG_PATH.lock().unwrap() = Some(path.clone());
-    info(format!(
-        "======== 启动 LoudMail {} ========",
-        env!("CARGO_PKG_VERSION")
-    ));
+    info(format!("======== 启动 LoudMail {} ========", version));
     info(format!("日志文件: {}", path.display()));
 }
 

@@ -13,7 +13,7 @@ tauri-build = { version = "1.5", features = [] }
 # window-start-dragging: 无边框窗口靠 data-tauri-drag-region 拖动
 # dialog: 原生文件选择（上传语音）
 # system-tray: 常驻托盘（显示主窗口 / 停止报警 / 退出）
-tauri = { version = "1.8", features = [
+tauri = { version = "1.8", features = [ "window-maximize", "window-unmaximize",
   "macos-private-api",
   "window-start-dragging",
   "shell-open",

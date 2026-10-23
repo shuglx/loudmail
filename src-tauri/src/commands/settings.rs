@@ -161,10 +161,12 @@ pub fn cmd_tts_status(state: State<'_, Arc<AppState>>) -> TtsStatus {
 }
 
 #[tauri::command]
-pub fn cmd_get_app_info(state: State<'_, Arc<AppState>>) -> AppInfo {
+pub fn cmd_get_app_info(app: AppHandle, state: State<'_, Arc<AppState>>) -> AppInfo {
+    // 版本统一取 tauri.conf.json 的 package.version，前端标题栏与设置页共用
+    let package = app.package_info();
     AppInfo {
-        name: "LoudMail".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
+        name: package.name.clone(),
+        version: package.version.to_string(),
         tauri_version: "1.8".into(),
         data_dir: state.paths.root.to_string_lossy().to_string(),
         storage_files: store::storage_files(&state.paths),
@@ -191,6 +193,26 @@ pub fn cmd_hide_window(app: AppHandle) -> Result<(), String> {
 pub fn cmd_minimize_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_window("main").ok_or("主窗口不存在")?;
     window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
+    let window = app.get_window("main").ok_or("主窗口不存在")?;
+    let maximized = window.is_maximized().map_err(|e| e.to_string())?;
+    if maximized {
+        window.unmaximize().map_err(|e| e.to_string())?;
+        logfile::info("[窗口] 已还原窗口大小");
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+        logfile::info("[窗口] 已最大化");
+    }
+    Ok(!maximized)
+}
+
+#[tauri::command]
+pub fn cmd_is_window_maximized(app: AppHandle) -> Result<bool, String> {
+    let window = app.get_window("main").ok_or("主窗口不存在")?;
+    window.is_maximized().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

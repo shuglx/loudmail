@@ -60,6 +60,14 @@ export const InfoIcon = ({ size }) => (
   </Svg>
 );
 
+export const QuestionIcon = ({ size = 15 }) => (
+  <Svg size={size}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M9.6 9.5a2.5 2.5 0 114.1 2.3c-.8.6-1.7 1.1-1.7 2.3" />
+    <path d="M12 17h.01" />
+  </Svg>
+);
+
 export const GripIcon = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
     <circle cx="5" cy="4" r="1.2" />

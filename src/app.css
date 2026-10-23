@@ -98,16 +98,33 @@ button:focus {
   border-radius: 50%;
   border: none;
   padding: 0;
-  display: block;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+  transition: filter 0.12s;
+}
+/* 悬停整组红绿灯时才显示图标，与 macOS 一致 */
+.traffic .dot svg {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.traffic:hover .dot svg {
+  opacity: 1;
+}
+.traffic .dot:active {
+  filter: brightness(0.88);
 }
 .dot.close {
   background: #ff5f57;
+  color: #8a1a14;
 }
 .dot.min {
   background: #febc2e;
+  color: #8a5a00;
 }
 .dot.max {
   background: #28c840;
+  color: #0b6b1f;
 }
 .titlebar-drag {
   flex: 1;
@@ -131,9 +148,29 @@ button:focus {
   padding: 1px 7px;
   background: #fbfbfc;
 }
-.titlebar-spacer {
+.titlebar-actions {
   width: 92px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.titlebar-actions .icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--muted-2);
+}
+.titlebar-actions .icon-btn:hover {
+  color: var(--ink);
+}
+/* 最大化时去掉圆角，避免屏幕边缘出现透明缝隙 */
+.window.maximized {
+  border-radius: 0;
+}
+/* 让标题栏文字不拦截拖动区域的事件 */
+.titlebar-drag > * {
+  pointer-events: none;
 }
 
 .app {
@@ -1237,6 +1274,55 @@ select.control:focus {
   border-top: 1px solid var(--line);
   background: #fcfcfd;
 }
+/* ---------- 使用说明 ---------- */
+.help-lead {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.help-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-2);
+  letter-spacing: 0.2px;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.help-table th:first-child {
+  width: 92px;
+}
+.help-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.help-table td:first-child {
+  color: var(--text);
+  font-weight: 550;
+  white-space: nowrap;
+}
+.help-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.help-table tbody tr:hover td {
+  background: #fbfbfc;
+}
+.help-note {
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+  line-height: 1.7;
+}
 .confirm-desc {
   font-size: 12.5px;
   color: var(--muted);
@@ -1536,6 +1622,35 @@ select.control:focus {
   background: #fff;
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(10, 10, 12, 0.08);
+}
+/* 三个 tab 面板叠放在同一网格单元：弹窗高度固定为最高面板的高度 */
+.new-panels {
+  display: grid;
+}
+.new-panel {
+  grid-area: 1 / 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  visibility: hidden;
+  pointer-events: none;
+}
+.new-panel.on {
+  visibility: visible;
+  pointer-events: auto;
+}
+/* 上传面板内容较少，让拖拽区填满同样的高度 */
+.new-panel.upload .dropzone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+/* 合成按钮吸底，各面板间距一致 */
+.new-panel .compose-actions {
+  margin-top: auto;
+  padding-top: 14px;
 }
 .compose-cols {
   display: grid;

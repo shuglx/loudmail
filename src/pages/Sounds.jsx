@@ -443,8 +443,8 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
           ))}
         </div>
 
-        {draft.channel === 'upload' ? (
-          <>
+        <div className="new-panels">
+          <div className={`new-panel upload${draft.channel === 'upload' ? ' on' : ''}`}>
             <div className="dropzone" onClick={pickFile}>
               <div className="dz-ico">
                 <UploadIcon size={16} />
@@ -463,248 +463,253 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                 </div>
               </div>
             ) : null}
-          </>
-        ) : (
-          <>
-            <div className="compose-area">
-              <div className="compose-cols">
-                <div className="compose-col ring-col">
-                  <div className="compose-head">
-                    <span>① 报警铃声</span>
-                    <label className="loops">
-                      循环
-                      <select
-                        value={draft.loops}
-                        onChange={(e) => {
-                          patch({ loops: Number(e.target.value) });
-                          resetComposed();
-                        }}
-                      >
-                        {[1, 2, 3, 4, 5].map((n) => (
-                          <option key={n} value={n}>
-                            {n} 次
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="ringtone-list">
-                    <button
-                      className={`ringtone-item${draft.ringtoneId === '' ? ' active' : ''}`}
-                      onClick={() => {
-                        patch({ ringtoneId: '' });
-                        resetComposed();
-                      }}
-                    >
-                      无
-                    </button>
-                    {builtins.map((item) => (
-                      <div
-                        className={`ringtone-item${draft.ringtoneId === item.id ? ' active' : ''}`}
-                        key={item.id}
-                      >
-                        <button
-                          className="ringtone-name"
-                          onClick={() => {
-                            patch({ ringtoneId: item.id });
+          </div>
+          {['record', 'tts'].map((mode) => (
+            <div
+              key={mode}
+              className={`new-panel${draft.channel === mode ? ' on' : ''}`}
+              aria-hidden={draft.channel !== mode}
+            >
+              <div className="compose-area">
+                <div className="compose-cols">
+                  <div className="compose-col ring-col">
+                    <div className="compose-head">
+                      <span>① 报警铃声</span>
+                      <label className="loops">
+                        循环
+                        <select
+                          value={draft.loops}
+                          onChange={(e) => {
+                            patch({ loops: Number(e.target.value) });
                             resetComposed();
                           }}
                         >
-                          {item.name}
-                        </button>
-                        <button
-                          className="ringtone-play"
-                          aria-label="试听铃声"
-                          onClick={() => preview(item)}
-                        >
-                          {playingId === item.id ? (
-                            <StopIcon size={10} />
-                          ) : (
-                            <PlayIcon size={10} />
-                          )}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="compose-col voice-col">
-                  <div className="compose-head">
-                    <span>② {draft.channel === 'record' ? '录制人声' : '文本人声'}</span>
-                  </div>
-                  {draft.channel === 'record' ? (
-                    <div className="record-box">
-                      <div className="record-timer">{formatClock(draft.recordSeconds)}</div>
-                      <div
-                        className={`record-wave${draft.recordPhase === 'recording' ? ' on' : ''}`}
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <option key={n} value={n}>
+                              {n} 次
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="ringtone-list">
+                      <button
+                        className={`ringtone-item${draft.ringtoneId === '' ? ' active' : ''}`}
+                        onClick={() => {
+                          patch({ ringtoneId: '' });
+                          resetComposed();
+                        }}
                       >
-                        {Array.from({ length: 24 }).map((_, i) => (
-                          <i key={i} style={{ animationDelay: `${(i % 7) * 0.08}s` }} />
-                        ))}
+                        无
+                      </button>
+                      {builtins.map((item) => (
+                        <div
+                          className={`ringtone-item${draft.ringtoneId === item.id ? ' active' : ''}`}
+                          key={item.id}
+                        >
+                          <button
+                            className="ringtone-name"
+                            onClick={() => {
+                              patch({ ringtoneId: item.id });
+                              resetComposed();
+                            }}
+                          >
+                            {item.name}
+                          </button>
+                          <button
+                            className="ringtone-play"
+                            aria-label="试听铃声"
+                            onClick={() => preview(item)}
+                          >
+                            {playingId === item.id ? (
+                              <StopIcon size={10} />
+                            ) : (
+                              <PlayIcon size={10} />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="compose-col voice-col">
+                    <div className="compose-head">
+                      <span>② {mode === 'record' ? '录制人声' : '文本人声'}</span>
+                    </div>
+                    {mode === 'record' ? (
+                      <div className="record-box">
+                        <div className="record-timer">{formatClock(draft.recordSeconds)}</div>
+                        <div
+                          className={`record-wave${draft.recordPhase === 'recording' ? ' on' : ''}`}
+                        >
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <i key={i} style={{ animationDelay: `${(i % 7) * 0.08}s` }} />
+                          ))}
+                        </div>
+                        <div className="voice-actions">
+                          {draft.recordPhase === 'idle' ? (
+                            <button className="btn btn-primary" onClick={startRecording}>
+                              开始录音
+                            </button>
+                          ) : null}
+                          {draft.recordPhase === 'recording' ? (
+                            <button className="btn" onClick={stopRecording}>
+                              停止
+                            </button>
+                          ) : null}
+                          {draft.recordPhase === 'done' ? (
+                            <>
+                              <button
+                                className="btn"
+                                onClick={() =>
+                                  playTemp(
+                                    'voice',
+                                    draft.recordResult.path,
+                                    draft.recordResult.durationMs
+                                  )
+                                }
+                              >
+                                {previewing === 'voice' ? '停止试听' : '试听人声'}
+                              </button>
+                              <button
+                                className="btn"
+                                onClick={() => {
+                                  patch({
+                                    recordPhase: 'idle',
+                                    recordSeconds: 0,
+                                    recordResult: null,
+                                    composed: null,
+                                  });
+                                }}
+                              >
+                                重录
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                        <p className="record-hint">
+                          {draft.recordPhase === 'idle'
+                            ? '首次录音会请求麦克风权限，最长 15 秒。'
+                            : draft.recordPhase === 'recording'
+                              ? '正在录音…'
+                              : `已录制 ${formatDuration(draft.recordResult?.durationMs)}。`}
+                        </p>
                       </div>
-                      <div className="voice-actions">
-                        {draft.recordPhase === 'idle' ? (
-                          <button className="btn btn-primary" onClick={startRecording}>
-                            开始录音
+                    ) : (
+                      <div className="tts-box">
+                        <div className="tts-hint">
+                          {ttsInfo && !ttsInfo.ready
+                            ? `TTS 不可用：${ttsInfo.message}`
+                            : '输入不超过 50 字，生成后可试听。'}
+                        </div>
+                        <textarea
+                          rows={4}
+                          maxLength={50}
+                          value={draft.ttsText}
+                          placeholder="例如：收到一条 SOC 系统的报警，请及时处理"
+                          onChange={(e) =>
+                            patch({ ttsText: e.target.value, ttsVoice: null, composed: null })
+                          }
+                        />
+                        <div className="tts-actions">
+                          <span className="counter">{draft.ttsText.length} / 50</span>
+                          <button className="btn btn-sm" onClick={generateTts} disabled={draft.ttsBusy}>
+                            {draft.ttsBusy ? '生成中…' : '生成语音'}
                           </button>
-                        ) : null}
-                        {draft.recordPhase === 'recording' ? (
-                          <button className="btn" onClick={stopRecording}>
-                            停止
-                          </button>
-                        ) : null}
-                        {draft.recordPhase === 'done' ? (
-                          <>
+                          {draft.ttsVoice ? (
                             <button
-                              className="btn"
+                              className="btn btn-sm"
                               onClick={() =>
-                                playTemp(
-                                  'voice',
-                                  draft.recordResult.path,
-                                  draft.recordResult.durationMs
-                                )
+                                playTemp('voice', draft.ttsVoice.path, draft.ttsVoice.durationMs)
                               }
                             >
                               {previewing === 'voice' ? '停止试听' : '试听人声'}
                             </button>
-                            <button
-                              className="btn"
-                              onClick={() => {
-                                patch({
-                                  recordPhase: 'idle',
-                                  recordSeconds: 0,
-                                  recordResult: null,
-                                  composed: null,
-                                });
-                              }}
-                            >
-                              重录
-                            </button>
-                          </>
-                        ) : null}
+                          ) : null}
+                        </div>
                       </div>
-                      <p className="record-hint">
-                        {draft.recordPhase === 'idle'
-                          ? '首次录音会请求麦克风权限，最长 15 秒。'
-                          : draft.recordPhase === 'recording'
-                            ? '正在录音…'
-                            : `已录制 ${formatDuration(draft.recordResult?.durationMs)}。`}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="tts-box">
-                      <div className="tts-hint">
-                        {ttsInfo && !ttsInfo.ready
-                          ? `TTS 不可用：${ttsInfo.message}`
-                          : '输入不超过 50 字，生成后可试听。'}
-                      </div>
-                      <textarea
-                        rows={4}
-                        maxLength={50}
-                        value={draft.ttsText}
-                        placeholder="例如：收到一条 SOC 系统的报警，请及时处理"
-                        onChange={(e) =>
-                          patch({ ttsText: e.target.value, ttsVoice: null, composed: null })
-                        }
-                      />
-                      <div className="tts-actions">
-                        <span className="counter">{draft.ttsText.length} / 50</span>
-                        <button className="btn btn-sm" onClick={generateTts} disabled={draft.ttsBusy}>
-                          {draft.ttsBusy ? '生成中…' : '生成语音'}
-                        </button>
-                        {draft.ttsVoice ? (
-                          <button
-                            className="btn btn-sm"
-                            onClick={() =>
-                              playTemp('voice', draft.ttsVoice.path, draft.ttsVoice.durationMs)
-                            }
-                          >
-                            {previewing === 'voice' ? '停止试听' : '试听人声'}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="compose-track">
-                <div className="lane">
-                  {ringtone ? (
-                    <div className="lane-block ring">
-                      <b>{ringtone.name}</b>
-                      <span>× {draft.loops}</span>
-                    </div>
-                  ) : (
-                    <div className="lane-block none">无铃声</div>
-                  )}
-                  <span className="lane-gap" aria-hidden="true" />
-                  <div className={`lane-block voice${voice ? '' : ' empty'}`}>
-                    {voice ? (
-                      <>
-                        <b>人声</b>
-                        <span>{formatDuration(voice.durationMs)}</span>
-                      </>
-                    ) : (
-                      '待录制 / 生成'
                     )}
                   </div>
                 </div>
-                <div className={`merge-brace${draft.composed ? ' ready' : ''}`}>
-                  <svg
-                    viewBox="0 0 100 14"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                    className="brace-svg"
+
+                <div className="compose-track">
+                  <div className="lane">
+                    {ringtone ? (
+                      <div className="lane-block ring">
+                        <b>{ringtone.name}</b>
+                        <span>× {draft.loops}</span>
+                      </div>
+                    ) : (
+                      <div className="lane-block none">无铃声</div>
+                    )}
+                    <span className="lane-gap" aria-hidden="true" />
+                    <div className={`lane-block voice${voice ? '' : ' empty'}`}>
+                      {voice ? (
+                        <>
+                          <b>人声</b>
+                          <span>{formatDuration(voice.durationMs)}</span>
+                        </>
+                      ) : (
+                        '待录制 / 生成'
+                      )}
+                    </div>
+                  </div>
+                  <div className={`merge-brace${draft.composed ? ' ready' : ''}`}>
+                    <svg
+                      viewBox="0 0 100 14"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                      className="brace-svg"
+                    >
+                      <path
+                        d="M1 1v6a3 3 0 0 0 3 3h92a3 3 0 0 0 3-3V1"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                      />
+                    </svg>
+                    <span className="brace-label">
+                      {draft.composed
+                        ? `已合成为一段语音 · ${formatDuration(draft.composed.durationMs)}`
+                        : '合成为一段语音'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="compose-actions">
+                <div className={`compose-submit${draft.composed ? ' split' : ''}`}>
+                  <button
+                    className="btn compose-btn"
+                    onClick={compose}
+                    disabled={!voice || draft.composing}
                   >
-                    <path
-                      d="M1 1v6a3 3 0 0 0 3 3h92a3 3 0 0 0 3-3V1"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                    />
-                  </svg>
-                  <span className="brace-label">
-                    {draft.composed
-                      ? `已合成为一段语音 · ${formatDuration(draft.composed.durationMs)}`
-                      : '合成为一段语音'}
-                  </span>
+                    {draft.composing ? (
+                      <span className="compose-dots" aria-label="合成中">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    ) : (
+                      '开始合成'
+                    )}
+                  </button>
+                  {draft.composed ? (
+                    <button
+                      className="compose-play"
+                      aria-label="试听合成结果"
+                      onClick={() =>
+                        playTemp('final', draft.composed.path, draft.composed.durationMs)
+                      }
+                    >
+                      {previewing === 'final' ? <StopIcon size={11} /> : <PlayIcon size={11} />}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
-
-            <div className="compose-actions">
-              <div className={`compose-submit${draft.composed ? ' split' : ''}`}>
-                <button
-                  className="btn compose-btn"
-                  onClick={compose}
-                  disabled={!voice || draft.composing}
-                >
-                  {draft.composing ? (
-                    <span className="compose-dots" aria-label="合成中">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                  ) : (
-                    '开始合成'
-                  )}
-                </button>
-                {draft.composed ? (
-                  <button
-                    className="compose-play"
-                    aria-label="试听合成结果"
-                    onClick={() =>
-                      playTemp('final', draft.composed.path, draft.composed.durationMs)
-                    }
-                  >
-                    {previewing === 'final' ? <StopIcon size={11} /> : <PlayIcon size={11} />}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </>
-        )}
+          ))}
+        </div>
 
         <div className="field" style={{ marginTop: 14 }}>
           <label>语音名称</label>

@@ -19,5 +19,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // 不监听 Rust 产物目录：Windows 上正在运行的 loudmail.exe 被 fs.watch 打开会抛
+    // EBUSY 导致 vite 崩掉，进而 tauri dev 报 "beforeDevCommand terminated"
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
   },
 });

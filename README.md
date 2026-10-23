@@ -1,11 +1,4 @@
-<div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&height=100&section=header" alt="" />
-</div>
-
-<h1 align="center">
-  <img src="public/logo.png" alt="LoudMail" width="30" height="30" />
-  LoudMail
-</h1>
+![Header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=170&text=LoudMail&fontSize=58&animation=fadeIn)
 
 <div align="center">
 
@@ -25,6 +18,10 @@
 值班场景里真正要紧的邮件（SOC 安全告警、数据库告警、系统故障通知）往往混在大量通知里，靠人隔一会儿切到邮箱看一眼并不可靠；而这类告警本身有时间要求（比如 15 分钟内必须处置）。
 
 LoudMail 把"盯邮件"这件事自动化：**匹配规则 → 轮询检索 → 命中就播报警音**，人不在邮件页面前也不会漏。同时把语音素材做成可自选的语音库（内置铃声、上传、录音、文本转语音），并支持铃声与人声合成，让报警既响亮又能直接听懂是什么事。
+
+<div align="center">
+  <img src="public/logo.png" alt="LoudMail" width="180" />
+</div>
 
 ## 核心功能
 

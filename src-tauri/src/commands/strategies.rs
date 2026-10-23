@@ -52,6 +52,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
         name,
         sender,
         keyword,
+        filter_replies: input.filter_replies,
         sound_id,
         play_count: input.play_count.clamp(1, 3),
         enabled: input.enabled,
@@ -80,6 +81,7 @@ pub fn cmd_create_strategy(
         enabled: input.enabled,
         sender: input.sender,
         keyword: input.keyword,
+        filter_replies: input.filter_replies,
         sound_id: input.sound_id,
         play_count: input.play_count,
         cursor_seq: None,
@@ -113,6 +115,7 @@ pub fn cmd_update_strategy(
     item.enabled = input.enabled;
     item.sender = input.sender;
     item.keyword = input.keyword;
+    item.filter_replies = input.filter_replies;
     item.sound_id = input.sound_id;
     item.play_count = input.play_count;
     item.updated_at = store::now_iso();

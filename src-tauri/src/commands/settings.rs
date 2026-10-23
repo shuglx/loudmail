@@ -92,8 +92,17 @@ pub fn cmd_get_log_path() -> Option<String> {
 }
 
 #[tauri::command]
-pub fn cmd_open_path(app: AppHandle, path: String) -> Result<(), String> {
-    tauri::api::shell::open(&app.shell_scope(), path, None).map_err(|e| e.to_string())
+pub fn cmd_open_path(path: String) -> Result<(), String> {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        return open::that(&path).map_err(|e| format!("打开失败: {e}"));
+    }
+    let target = std::path::Path::new(&path);
+    if !target.exists() {
+        logfile::warn(format!("打开失败，文件不存在: {path}"));
+        return Err(format!("文件不存在：{path}"));
+    }
+    logfile::info(format!("打开路径: {path}"));
+    open::that(target).map_err(|e| format!("打开失败: {e}"))
 }
 
 #[tauri::command]

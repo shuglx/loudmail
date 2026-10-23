@@ -43,6 +43,16 @@ pub fn init(root: PathBuf) -> Result<AppPaths, String> {
     for dir in [&paths.root, &paths.sounds_dir, &paths.recordings_dir, &paths.logs_dir] {
         fs::create_dir_all(dir).map_err(|e| format!("创建数据目录失败: {e}"))?;
     }
+    // 初始化时补齐数据文件，保证「设置 → 存储」中的条目始终可打开
+    if !paths.config.exists() {
+        save_config(&paths, &AppConfig::default())?;
+    }
+    if !paths.strategies.exists() {
+        save_strategies(&paths, &[])?;
+    }
+    if !paths.history.exists() {
+        save_history(&paths, &[])?;
+    }
     Ok(paths)
 }
 

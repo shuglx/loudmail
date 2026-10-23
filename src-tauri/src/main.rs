@@ -9,6 +9,7 @@ mod store;
 mod system;
 
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::{
@@ -29,7 +30,7 @@ pub fn show_main(app: &AppHandle) {
 fn main() {
     let tray_menu = SystemTrayMenu::new()
         .add_item(CustomMenuItem::new("show", "显示主窗口"))
-        .add_item(CustomMenuItem::new("stop", "停止报警"))
+        .add_item(CustomMenuItem::new("pause", "暂停播报"))
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(CustomMenuItem::new("quit", "退出"));
 
@@ -46,10 +47,19 @@ fn main() {
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
                 "show" => show_main(app),
-                "stop" => {
+                "pause" => {
                     if let Some(state) = app.try_state::<Arc<AppState>>() {
-                        state.player.stop();
-                        logfile::info("[托盘] 已停止报警播放");
+                        let paused = !state.paused.load(Ordering::Relaxed);
+                        state.paused.store(paused, Ordering::Relaxed);
+                        if paused {
+                            state.player.stop();
+                        }
+                        let _ = app.tray_handle().get_item("pause").set_selected(paused);
+                        logfile::info(if paused {
+                            "[托盘] 已暂停播报，停止轮询匹配"
+                        } else {
+                            "[托盘] 已恢复播报，继续轮询匹配"
+                        });
                     }
                 }
                 "quit" => {

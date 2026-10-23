@@ -11,7 +11,7 @@ import { ClockIcon, ShieldIcon, SlidersIcon, SpeakerIcon } from './icons';
 const PAGES = ['strategies', 'history', 'sounds', 'settings'];
 
 const NAV = [
-  { key: 'strategies', label: '检查策略', icon: ShieldIcon },
+  { key: 'strategies', label: '匹配策略', icon: ShieldIcon },
   { key: 'history', label: '播报记录', icon: ClockIcon },
   { key: 'sounds', label: '语音库', icon: SpeakerIcon },
   { key: 'settings', label: '设置', icon: SlidersIcon },
@@ -143,7 +143,7 @@ export default function App() {
           <span className="titlebar-title">LoudMail</span>
           <span className="proto-badge">v0.1</span>
         </div>
-        <div className="titlebar-right">邮件到达播报</div>
+        <div className="titlebar-spacer" />
       </header>
 
       <div className="app">
@@ -181,7 +181,7 @@ export default function App() {
                 <small>
                   {status.connected
                     ? `${status.serverName || 'CoremailAir'} ${status.serverVersion || ''}`.trim()
-                    : status.lastError || '等待客户端启动'}
+                    : '邮箱 MCP 不可达'}
                 </small>
               </div>
             </div>

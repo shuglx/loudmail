@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -58,6 +62,8 @@ pub struct Strategy {
     pub enabled: bool,
     pub sender: String,
     pub keyword: String,
+    #[serde(default = "default_true")]
+    pub filter_replies: bool,
     pub sound_id: Option<String>,
     pub play_count: u8,
     pub cursor_seq: Option<u64>,
@@ -71,6 +77,8 @@ pub struct StrategyInput {
     pub name: String,
     pub sender: String,
     pub keyword: String,
+    #[serde(default = "default_true")]
+    pub filter_replies: bool,
     pub sound_id: Option<String>,
     pub play_count: u8,
     pub enabled: bool,
@@ -93,6 +101,8 @@ pub struct HistoryRecord {
     pub mail_id: String,
     pub sender: String,
     pub subject: String,
+    #[serde(default)]
+    pub summary: String,
     pub sound_name: String,
     pub play_count: u8,
 }

@@ -9,6 +9,7 @@ const emptyForm = {
   name: '',
   sender: '',
   keyword: '',
+  filterReplies: true,
   soundId: '',
   playCount: 1,
   enabled: true,
@@ -39,6 +40,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       name: strategy.name,
       sender: strategy.sender,
       keyword: strategy.keyword,
+      filterReplies: strategy.filterReplies !== false,
       soundId: strategy.soundId || '',
       playCount: strategy.playCount || 1,
       enabled: strategy.enabled,
@@ -137,7 +139,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
   return (
     <section className="page">
       <div className="page-head">
-        <h1>检查策略</h1>
+        <h1>匹配策略</h1>
         <div className="head-actions">
           <button className="btn btn-primary" onClick={openCreate}>
             ＋ 新增策略
@@ -146,7 +148,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       </div>
 
       <div className="strategy-meta">
-        <span className="strategy-note">根据策略顺序从上至下匹配，同一封邮件仅命中播报一次</span>
+        <span className="strategy-note">根据策略顺序从上至下匹配，同一封邮件仅会命中和播报一次</span>
         <span className="muted strategy-count">
           {strategies.length} 条策略 · {enabledCount} 条启用
         </span>
@@ -160,13 +162,13 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           <span>标题关键词</span>
           <span>语音</span>
           <span>启用</span>
-          <span>操作</span>
+          <span />
         </div>
         <div>
           {strategies.length === 0 ? (
             <div className="empty">
               <div className="empty-ico">◎</div>
-              <b>还没有检查策略</b>
+              <b>还没有匹配策略</b>
               <p>创建一条策略，指定发件人与标题关键词，命中后自动播放报警声。</p>
               <button className="btn btn-primary" onClick={openCreate}>
                 ＋ 新增策略
@@ -223,7 +225,6 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                     <span className={`sound-chip${sound ? '' : ' missing'}`}>
                       {sound ? sound.name : '缺少语音'}
                     </span>
-                    <span className="mult">× {strategy.playCount} 次</span>
                   </div>
                   <div>
                     <Switch
@@ -298,6 +299,16 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
             onChange={(e) => setForm({ ...form, keyword: e.target.value })}
           />
           <p className="hint">作为服务端检索关键词，同时会在本地再校验标题是否包含该关键词。</p>
+        </div>
+        <div className="field field-inline">
+          <div className="label">
+            过滤回复和转发的邮件
+            <small>开启后，标题以“转发/回复 + 冒号”开头的邮件会被跳过</small>
+          </div>
+          <Switch
+            checked={form.filterReplies}
+            onChange={(checked) => setForm({ ...form, filterReplies: checked })}
+          />
         </div>
         <div className="field">
           <label>

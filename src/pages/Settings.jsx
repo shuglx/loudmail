@@ -3,6 +3,8 @@ import { api } from '../api';
 import Switch from '../components/Switch';
 import { ExternalIcon } from '../icons';
 
+const GITHUB_URL = 'https://github.com/shuglx/loudmail';
+
 export default function Settings({ config, status, flash, onConfigChange }) {
   const [host, setHost] = useState(config?.mcp.host || '127.0.0.1');
   const [port, setPort] = useState(String(config?.mcp.port || 11328));
@@ -227,7 +229,16 @@ export default function Settings({ config, status, flash, onConfigChange }) {
             <div className="about-row">
               <img src="/logo.png" alt="LoudMail" />
               <div>
-                <b>LoudMail</b>
+                <div className="about-name-row">
+                  <b>LoudMail</b>
+                  <button
+                    className="icon-btn about-github-btn"
+                    title="打开 GitHub 仓库"
+                    onClick={() => openPath(GITHUB_URL)}
+                  >
+                    <ExternalIcon size={12} />
+                  </button>
+                </div>
                 <small>
                   版本 {appInfo?.version || '0.1.0'}
                 </small>

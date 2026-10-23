@@ -23,6 +23,9 @@ pub fn start(state: Arc<AppState>) {
 
         loop {
             thread::sleep(Duration::from_millis(500));
+            if state.paused.load(Ordering::Relaxed) {
+                continue;
+            }
             let version = state.config_version.load(Ordering::Relaxed);
             if version != config_version {
                 config_version = version;
@@ -177,6 +180,9 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>)
             if !sender_expected.is_empty() && mail.sender_email() != sender_expected {
                 return false;
             }
+            if strategy.filter_replies && is_reply_or_forward(&mail.subject) {
+                return false;
+            }
             mail.subject.to_lowercase().contains(&keyword)
         })
         .cloned()
@@ -227,6 +233,7 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>)
             mail_id: mail_id.clone(),
             sender: mail.sender.clone(),
             subject: mail.subject.clone(),
+            summary: mail.summary.clone(),
             sound_name: sound.name.clone(),
             play_count,
         };
@@ -254,5 +261,38 @@ fn set_cursor(state: &AppState, strategy_id: &str, seq: u64) {
             item.cursor_seq = Some(seq);
             item.updated_at = store::now_iso();
         }
+    }
+}
+
+/// 标题是否以「转发 / 回复 + 中英文冒号」开头（允许前导空白、冒号前空格）
+fn is_reply_or_forward(subject: &str) -> bool {
+    let head = subject.trim_start();
+    for prefix in ["转发", "回复"] {
+        if let Some(rest) = head.strip_prefix(prefix) {
+            let rest = rest.trim_start();
+            if rest.starts_with(':') || rest.starts_with('：') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_reply_or_forward;
+
+    #[test]
+    fn detects_reply_and_forward_prefixes() {
+        assert!(is_reply_or_forward("转发: SOC_安全告警"));
+        assert!(is_reply_or_forward("转发：SOC_安全告警"));
+        assert!(is_reply_or_forward("回复:Re: SOC_安全告警"));
+        assert!(is_reply_or_forward("回复：SOC_安全告警"));
+        assert!(is_reply_or_forward("  转发 : SOC_安全告警"));
+        assert!(is_reply_or_forward("转发：“SOC_安全告警”"));
+        assert!(!is_reply_or_forward("转发SOC_安全告警"));
+        assert!(!is_reply_or_forward("【转发】SOC_安全告警"));
+        assert!(!is_reply_or_forward("Re: SOC_安全告警"));
+        assert!(!is_reply_or_forward("【5级】SOC_安全告警"));
     }
 }

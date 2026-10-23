@@ -78,15 +78,6 @@ export default function History({ history, flash, onCleared }) {
     }
   };
 
-  const copyMailId = (mailId) => {
-    const done = () => flash('已复制邮件 ID');
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(mailId).then(done).catch(() => fallbackCopy(mailId, done));
-    } else {
-      fallbackCopy(mailId, done);
-    }
-  };
-
   return (
     <section className="page">
       <div className="page-head">
@@ -183,15 +174,16 @@ export default function History({ history, flash, onCleared }) {
               onClick={() => setSelected(record)}
             >
               <span className="history-time">{record.time.slice(5, 16)}</span>
+              <span className="history-strategy" title={record.strategyName}>
+                {record.strategyName}
+              </span>
               <span className="history-main">
                 <b title={record.subject}>{record.subject}</b>
-                <span>
-                  {record.sender} · {record.strategyName}
-                </span>
+                <span>{record.sender}</span>
               </span>
               <span className="history-side">
                 <span className="tag">
-                  {record.soundName} ×{record.playCount}
+                  {record.soundName} × {record.playCount}
                 </span>
                 <span className="chev">
                   <ChevronRightIcon />
@@ -222,12 +214,15 @@ export default function History({ history, flash, onCleared }) {
               <Detail k="播放语音" v={selected.soundName} />
               <Detail k="播报次数" v={`${selected.playCount} 次`} />
               <Detail k="邮件 ID" v={selected.mailId} mono />
-            </div>
-            <div className="mailid-box">
-              <code>{selected.mailId}</code>
-              <button className="btn btn-sm" onClick={() => copyMailId(selected.mailId)}>
-                复制
-              </button>
+              <div className="detail-item detail-summary">
+                <span className="k">邮件摘要</span>
+                <textarea
+                  readOnly
+                  value={selected.summary || ''}
+                  placeholder="无摘要"
+                  rows={4}
+                />
+              </div>
             </div>
           </>
         ) : null}
@@ -252,20 +247,4 @@ function Detail({ k, v, mono = false }) {
       <span className={`v${mono ? ' mono' : ''}`}>{v}</span>
     </div>
   );
-}
-
-function fallbackCopy(text, done) {
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    document.execCommand('copy');
-    done();
-  } catch {
-    // ignore
-  }
-  document.body.removeChild(textarea);
 }

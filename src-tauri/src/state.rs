@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex, RwLock};
 
 use tauri::{AppHandle, Manager};
@@ -19,6 +19,7 @@ pub struct AppState {
     pub runtime: RwLock<RuntimeStatus>,
     pub seen: Mutex<HashSet<String>>,
     pub config_version: AtomicU64,
+    pub paused: AtomicBool,
     pub player: PlayerHandle,
     pub recorder: RecorderHandle,
 }
@@ -51,6 +52,7 @@ impl AppState {
             runtime: RwLock::new(runtime),
             seen: Mutex::new(seen),
             config_version: AtomicU64::new(0),
+            paused: AtomicBool::new(false),
             player: start_player(),
             recorder,
         }))

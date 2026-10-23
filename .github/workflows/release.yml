@@ -101,6 +101,67 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ---------------------------------------------------------------- Windows(绿色版 exe)
+  # 只出可执行文件 + zip，不做安装包(msi/nsis)；依赖 WebView2 运行时(Win10+ 常见自带)
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-win-x64-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-win-x64-
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build frontend (vite)
+        run: npm run build
+
+      # 与 Linux 一样直接用 cargo：Cargo.toml 默认开启 custom-protocol,
+      # 产物即 src-tauri/target/release/loudmail.exe(单文件，无安装包)
+      - name: Build portable exe
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force dist-win | Out-Null
+          Copy-Item src-tauri/target/release/loudmail.exe dist-win/
+          Compress-Archive -Path dist-win/loudmail.exe `
+            -DestinationPath "dist-win/loudmail_${ver}_win-x64-portable.zip" -Force
+          Get-ChildItem dist-win | Format-Table Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: loudmail-win-x64-portable
+          path: dist-win/*.zip
+
+      - name: Attach exe to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-win/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ---------------------------------------------------------------- macOS(M 系列)
   build-dmg:
     runs-on: macos-14 # Apple Silicon(M 系列)，无需交叉编译

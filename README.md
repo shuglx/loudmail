@@ -69,6 +69,12 @@ sudo dpkg -i loudmail_x.y.z_arm64.deb
 
 3. 首次录音时按系统提示授权麦克风。
 
+**Windows（绿色版，x64）**
+
+1. 解压 `loudmail_x.y.z_win-x64-portable.zip`，双击其中的 `loudmail.exe` 即可，无需安装；建议放在不含空格/中文的目录；
+2. 依赖 WebView2 运行时（Windows 10 1809+ / Windows 11 通常已自带，缺失时安装微软 Evergreen 运行时）；
+3. 数据与日志位于 `%APPDATA%\com.loudmail.app`；开机自启写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`。
+
 启动后在「设置」里确认 MCP 端点（默认 `127.0.0.1:11328`）为已连接，再新建一条策略即可。
 
 ## 从源码构建

@@ -1,3 +1,6 @@
+// Windows 发布版不额外弹控制台窗口；dev 构建(debug)与其它平台行为不变
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod audio;
 mod commands;
 mod logfile;

@@ -3,6 +3,7 @@ node_modules/
 dist/
 dist-deb/
 dist-dmg/
+dist-win/
 .vite/
 .ci-cache/
 

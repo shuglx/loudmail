@@ -1,5 +1,9 @@
+<div align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&height=100&section=header" alt="" />
+</div>
+
 <h1 align="center">
-  <img src="public/logo.png" alt="LoudMail" width="46" height="46" align="middle" />
+  <img src="public/logo.png" alt="LoudMail" width="30" height="30" />
   LoudMail
 </h1>
 

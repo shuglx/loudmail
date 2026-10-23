@@ -1,4 +1,10 @@
-![Header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=170&text=LoudMail&fontSize=58&animation=fadeIn&desc=%E9%82%AE%E4%BB%B6%E5%88%B0%E8%BE%BE%E6%92%AD%E6%8A%A5&descAlignY=68)
+<div align="center">
+  <img src="public/logo.png" alt="LoudMail" width="104" />
+</div>
+
+![Header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=170&text=LoudMail&fontSize=58&animation=fadeIn)
+
+<div align="center">
 
 [![Release](https://img.shields.io/github/v/release/shuglx/loudmail?style=flat-square)](https://github.com/shuglx/loudmail/releases)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
@@ -6,6 +12,8 @@
 ![Tauri](https://img.shields.io/badge/-Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/-Rust-DEA584?style=flat-square&logo=rust&logoColor=white)
 ![React](https://img.shields.io/badge/-React-61DAFB?style=flat-square&logo=react&logoColor=black)
+
+</div>
 
 按你的规则盯邮件：命中指定发件人 / 标题关键词的邮件到达后，自动播放报警语音。基于 Tauri（Rust + React）构建，通过本机 **Coremail（e企邮）MCP** 服务只读检索邮箱。
 

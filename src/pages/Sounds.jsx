@@ -6,6 +6,8 @@ import { PlayIcon, SearchIcon, StopIcon, UploadIcon } from '../icons';
 
 const sourceLabel = { builtin: '内置', upload: '上传', record: '录音', tts: '文本' };
 
+const isBuiltin = (sound) => sound.source === 'builtin';
+
 const CHANNELS = [
   { key: 'upload', label: '上传文件' },
   { key: 'record', label: '录音' },
@@ -57,7 +59,7 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
   }, [newOpen, draft.channel]);
 
   const usedBy = (id) => strategies.filter((s) => s.soundId === id);
-  const builtins = sounds.filter((s) => s.source === 'builtin');
+  const builtins = sounds.filter(isBuiltin);
   const keyword = query.trim().toLowerCase();
   const visible = keyword
     ? sounds.filter((sound) => sound.name.toLowerCase().includes(keyword))
@@ -232,7 +234,6 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
       patch({
         ttsVoice: result,
         ttsBusy: false,
-        name: draft.name || draft.ttsText.trim().slice(0, 12),
       });
     } catch (e) {
       setError(String(e));
@@ -391,19 +392,24 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                   </span>
                 ) : null}
               </div>
-              <div className="sound-actions">
-                <button
-                  onClick={() => {
-                    setRenameTarget(sound);
-                    setRenameValue(sound.name);
-                  }}
-                >
-                  重命名
-                </button>
-                <button className="danger" onClick={() => setDeleteTarget(sound)}>
-                  删除
-                </button>
-              </div>
+              {isBuiltin(sound) ? null : (
+                <div className="sound-actions">
+                  <button
+                    onClick={() => {
+                      setRenameTarget(sound);
+                      setRenameValue(sound.name);
+                    }}
+                  >
+                    重命名
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => setDeleteTarget(sound)}
+                  >
+                    删除
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -632,7 +638,7 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                   ) : (
                     <div className="lane-block none">无铃声</div>
                   )}
-                  <span className="lane-gap">{ringtone ? '300ms' : ''}</span>
+                  <span className="lane-gap" aria-hidden="true" />
                   <div className={`lane-block voice${voice ? '' : ' empty'}`}>
                     {voice ? (
                       <>
@@ -668,20 +674,34 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
             </div>
 
             <div className="compose-actions">
-              <button className="btn" onClick={compose} disabled={!voice || draft.composing}>
-                {draft.composing ? '合成中…' : '合成试听'}
-              </button>
-              {draft.composed ? (
+              <div className={`compose-submit${draft.composed ? ' split' : ''}`}>
                 <button
-                  className="btn btn-sm"
-                  onClick={() =>
-                    playTemp('final', draft.composed.path, draft.composed.durationMs)
-                  }
+                  className="btn compose-btn"
+                  onClick={compose}
+                  disabled={!voice || draft.composing}
                 >
-                  {previewing === 'final' ? '停止试听' : '试听合成结果'}
+                  {draft.composing ? (
+                    <span className="compose-dots" aria-label="合成中">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  ) : (
+                    '开始合成'
+                  )}
                 </button>
-              ) : null}
-              {!voice ? <span className="muted">先完成人声录制或生成，再合成</span> : null}
+                {draft.composed ? (
+                  <button
+                    className="compose-play"
+                    aria-label="试听合成结果"
+                    onClick={() =>
+                      playTemp('final', draft.composed.path, draft.composed.durationMs)
+                    }
+                  >
+                    {previewing === 'final' ? <StopIcon size={11} /> : <PlayIcon size={11} />}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </>
         )}

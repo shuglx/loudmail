@@ -1,6 +1,6 @@
 [package]
 name = "loudmail"
-version = "0.1.0"
+version = "1.0.0"
 license = "MIT"
 description = "邮件到达报警音提醒工具"
 authors = ["ryan"]
@@ -38,6 +38,10 @@ dirs = "5.0"
 open = "3.2"
 # 本地 TTS（模型文件外置，首次构建会拉取预编译静态库）
 sherpa-onnx = "1.13.8"
+# 在线 TTS（微软 Edge Read Aloud 接口）
+edge-tts-rust = "0.1"
+# 编译期嵌入 alert-sound 目录，目录内音频自动成为内置铃声
+include_dir = "0.7"
 
 [features]
 default = ["custom-protocol"]

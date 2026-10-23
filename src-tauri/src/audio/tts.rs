@@ -1,49 +1,109 @@
 use std::path::{Path, PathBuf};
 
+use edge_tts_rust::{EdgeTtsClient, SpeakOptions};
 use sherpa_onnx::{
     GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsModelConfig,
     OfflineTtsVitsModelConfig,
 };
 
-/// 外置 TTS 模型的三个必要组成部分
+use crate::logfile;
+
+/// 在线 Edge 语音使用的音色与格式
+const EDGE_VOICE_FEMALE: &str = "zh-CN-XiaoxiaoNeural";
+const EDGE_RATE: &str = "+10%";
+const EDGE_FORMAT: &str = "audio-24khz-48kbitrate-mono-mp3";
+/// 边缘节点偶发 reset，需要重试
+const EDGE_RETRIES: usize = 6;
+
+/// 在线合成：走微软 Edge Read Aloud 接口，返回 (采样, 采样率)
+pub async fn synthesize_edge(text: &str, voice: &str) -> Result<(Vec<f32>, u32), String> {
+    let voice = if voice.trim().is_empty() {
+        EDGE_VOICE_FEMALE
+    } else {
+        voice.trim()
+    };
+    let client = EdgeTtsClient::new().map_err(|e| format!("初始化在线语音失败: {e}"))?;
+    let mut last_error = String::new();
+    for attempt in 1..=EDGE_RETRIES {
+        let options = SpeakOptions {
+            voice: voice.into(),
+            rate: EDGE_RATE.into(),
+            output_format: EDGE_FORMAT.into(),
+            ..Default::default()
+        };
+        match client.synthesize(text.to_string(), options).await {
+            Ok(result) => return crate::audio::convert::decode_to_mono(&result.audio),
+            Err(e) => {
+                last_error = format!("在线语音合成失败: {e}");
+                logfile::warn(format!(
+                    "在线语音第 {attempt}/{EDGE_RETRIES} 次失败: {e}"
+                ));
+            }
+        }
+        if attempt < EDGE_RETRIES {
+            std::thread::sleep(std::time::Duration::from_millis(1200 * attempt as u64));
+        }
+    }
+    Err(last_error)
+}
+
+/// 外置 TTS 模型的组成：.onnx 与 tokens.txt 必需，
+/// espeak-ng-data（piper 系）与 lexicon.txt（MeloTTS 等）按模型二选一。
 pub struct TtsModel {
     pub onnx: PathBuf,
     pub tokens: PathBuf,
-    pub data_dir: PathBuf,
+    pub lexicon: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
+    /// 目录里可选的中文文本规范化规则（MeloTTS 提供 number.fst / date.fst）
+    pub rule_fsts: Option<String>,
 }
 
-/// 校验模型目录：取第一个 .onnx，并要求 tokens.txt 与 espeak-ng-data
+/// 校验模型目录：取目录中的 .onnx，并要求 tokens.txt 与至少一个文本前端资源
 pub fn resolve_model(model_dir: &str) -> Result<TtsModel, String> {
     let dir = Path::new(model_dir.trim());
     if model_dir.trim().is_empty() {
-        return Err("未配置 TTS 模型目录".into());
+        return Err("未选择 TTS 模型目录".into());
     }
     if !dir.is_dir() {
         return Err("TTS 模型目录不存在".into());
     }
+    // 取体积最大的 .onnx：目录里可能混有 int8 版本或 Git LFS 指针文件（几百字节）
     let onnx = std::fs::read_dir(dir)
         .map_err(|e| format!("读取模型目录失败: {e}"))?
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
-        .find(|path| {
-            path.extension()
+        .filter(|candidate| {
+            candidate
+                .extension()
                 .map(|ext| ext.eq_ignore_ascii_case("onnx"))
                 .unwrap_or(false)
         })
+        .max_by_key(|candidate| std::fs::metadata(candidate).map(|m| m.len()).unwrap_or(0))
         .ok_or_else(|| "模型目录中未找到 .onnx 模型文件".to_string())?;
 
     let tokens = dir.join("tokens.txt");
     if !tokens.is_file() {
         return Err("模型目录缺少 tokens.txt".into());
     }
+    let lexicon = dir.join("lexicon.txt");
+    let lexicon = lexicon.is_file().then_some(lexicon);
     let data_dir = dir.join("espeak-ng-data");
-    if !data_dir.is_dir() {
-        return Err("模型目录缺少 espeak-ng-data".into());
+    let data_dir = data_dir.is_dir().then_some(data_dir);
+    if lexicon.is_none() && data_dir.is_none() {
+        return Err("模型目录缺少 espeak-ng-data 或 lexicon.txt".into());
     }
+    let rule_fsts: Vec<String> = ["number.fst", "date.fst"]
+        .iter()
+        .map(|name| dir.join(name))
+        .filter(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect();
     Ok(TtsModel {
         onnx,
         tokens,
+        lexicon,
         data_dir,
+        rule_fsts: (!rule_fsts.is_empty()).then(|| rule_fsts.join(",")),
     })
 }
 
@@ -55,12 +115,20 @@ pub fn synthesize(model_dir: &str, text: &str, speed: f32) -> Result<(Vec<f32>, 
             vits: OfflineTtsVitsModelConfig {
                 model: Some(model.onnx.to_string_lossy().into_owned()),
                 tokens: Some(model.tokens.to_string_lossy().into_owned()),
-                data_dir: Some(model.data_dir.to_string_lossy().into_owned()),
+                lexicon: model
+                    .lexicon
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                data_dir: model
+                    .data_dir
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
                 ..Default::default()
             },
             num_threads: 2,
             ..Default::default()
         },
+        rule_fsts: model.rule_fsts,
         ..Default::default()
     };
     let tts = OfflineTts::create(&config).ok_or_else(|| "加载 TTS 模型失败".to_string())?;
@@ -70,11 +138,15 @@ pub fn synthesize(model_dir: &str, text: &str, speed: f32) -> Result<(Vec<f32>, 
     let mut speech: Vec<f32> = Vec::new();
     for (is_acronym, seg) in segment(&clean) {
         if is_acronym {
+            // 逐字母朗读：略放慢并留出明显间隔，避免字母之间连读
             for ch in seg.chars() {
-                speech.extend(trim(&synth(&tts, &letter_zh(ch), speed), sample_rate));
-                speech.extend(silence(sample_rate, 0.10));
+                speech.extend(trim(
+                    &synth(&tts, &letter_zh(ch), speed * LETTER_SPEED_RATIO),
+                    sample_rate,
+                ));
+                speech.extend(silence(sample_rate, LETTER_GAP_SEC));
             }
-            speech.extend(silence(sample_rate, 0.08));
+            speech.extend(silence(sample_rate, 0.12));
         } else if !seg.trim().is_empty() {
             speech.extend(synth(&tts, seg.trim(), speed));
             speech.extend(silence(sample_rate, 0.08));
@@ -94,10 +166,10 @@ const LETTER_ZH: &[(char, &str)] = &[
     ('Y', "歪"), ('Z', "贼"),
 ];
 
-const WORD_EXCEPTIONS: &[&str] = &[
-    "WINDOWS", "LINUX", "ANDROID", "ORACLE", "PYTHON", "KAFKA", "REDIS", "NGINX", "MACOS",
-    "DOCKER",
-];
+/// 逐字母朗读时的语速系数（越小越慢、越清晰）
+const LETTER_SPEED_RATIO: f32 = 0.85;
+/// 相邻字母之间的静音时长
+const LETTER_GAP_SEC: f32 = 0.20;
 
 fn letter_zh(c: char) -> String {
     LETTER_ZH
@@ -107,17 +179,7 @@ fn letter_zh(c: char) -> String {
         .unwrap_or_else(|| c.to_string())
 }
 
-fn is_acronym(word: &str) -> bool {
-    let first_upper = word
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_uppercase())
-        .unwrap_or(false);
-    let uppers = word.chars().filter(|c| c.is_ascii_uppercase()).count();
-    first_upper && uppers >= 2
-}
-
-/// 把缩写拆成独立片段，其余保持原文
+/// 把英文串整体拆成逐字母片段，其余保持原文
 fn segment(text: &str) -> Vec<(bool, String)> {
     let mut out = Vec::new();
     let mut last = 0usize;
@@ -128,37 +190,15 @@ fn segment(text: &str) -> Vec<(bool, String)> {
         let (start, c) = chars[i];
         if c.is_ascii_alphabetic() {
             let mut j = i;
-            while j < chars.len() && chars[j].1.is_ascii_alphanumeric() {
+            while j < chars.len() && chars[j].1.is_ascii_alphabetic() {
                 j += 1;
             }
             let end = if j < chars.len() { chars[j].0 } else { text.len() };
-            let word = &text[start..end];
-            let prev_ok = start == 0
-                || !text[..start]
-                    .chars()
-                    .last()
-                    .map(|p| p.is_ascii_alphanumeric())
-                    .unwrap_or(false);
-            let next_ok = j >= chars.len()
-                || !text[end..]
-                    .chars()
-                    .next()
-                    .map(|n| n.is_ascii_alphanumeric())
-                    .unwrap_or(false);
-
-            if word.len() >= 2
-                && word.len() <= 6
-                && prev_ok
-                && next_ok
-                && is_acronym(word)
-                && !WORD_EXCEPTIONS.contains(&word.to_uppercase().as_str())
-            {
-                if start > last {
-                    out.push((false, text[last..start].to_string()));
-                }
-                out.push((true, word.to_string()));
-                last = end;
+            if start > last {
+                out.push((false, text[last..start].to_string()));
             }
+            out.push((true, text[start..end].to_string()));
+            last = end;
             i = j;
         } else {
             i += 1;
@@ -234,12 +274,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn splits_acronyms_and_keeps_words() {
-        let segments = segment("收到一条SOC系统的报警，WINDOWS 正常");
-        assert!(segments.iter().any(|(acronym, value)| *acronym && value == "SOC"));
-        assert!(!segments
+    fn splits_every_english_run_for_letter_by_letter() {
+        let segments = segment("收到一条SOC系统的报警，Windows 正常");
+        assert!(segments
             .iter()
-            .any(|(acronym, value)| *acronym && value == "WINDOWS"));
+            .any(|(spell, value)| *spell && value == "SOC"));
+        assert!(segments
+            .iter()
+            .any(|(spell, value)| *spell && value == "Windows"));
     }
 
     #[test]

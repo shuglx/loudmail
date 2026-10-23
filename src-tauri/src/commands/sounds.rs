@@ -177,6 +177,9 @@ pub fn cmd_rename_sound(
     if display_name.is_empty() || display_name.chars().count() > 40 {
         return Err("请填写 1~40 字的语音名称".into());
     }
+    if store::is_protected_builtin(&id) {
+        return Err("内置铃声不可重命名".into());
+    }
     if let Some(item) = state
         .sounds
         .write()
@@ -193,6 +196,9 @@ pub fn cmd_rename_sound(
 
 #[tauri::command]
 pub fn cmd_delete_sound(state: State<'_, Arc<AppState>>, id: String) -> Result<(), String> {
+    if store::is_protected_builtin(&id) {
+        return Err("内置铃声不可删除".into());
+    }
     let removed = {
         let mut sounds = state.sounds.write().map_err(|e| e.to_string())?;
         let index = sounds.iter().position(|s| s.id == id);
@@ -278,7 +284,11 @@ pub async fn cmd_tts_generate(
     if !config.enabled {
         return Err("TTS 未启用，请先在设置中开启".into());
     }
-    let (samples, rate) = tts::synthesize(&config.model_dir, &content, config.speed)?;
+    let (samples, rate) = if config.provider == "edge" {
+        tts::synthesize_edge(&content, &config.edge_voice).await?
+    } else {
+        tts::synthesize(&config.model_dir, &content, config.speed)?
+    };
     let path = temp_wav_path(&state, "tts");
     let duration_ms = mix::write_wav_at(&path, &samples, rate)?;
     if duration_ms > mix::MAX_TOTAL_MS {
@@ -307,7 +317,7 @@ pub async fn cmd_compose_audio(
             let sound = state
                 .sound(id)
                 .ok_or_else(|| "所选铃声不存在".to_string())?;
-            if sound.source != "builtin" {
+            if !store::is_protected_builtin(&sound.id) {
                 return Err("仅支持内置铃声作为拼接素材".into());
             }
             let path = state.paths.sounds_dir.join(&sound.file);

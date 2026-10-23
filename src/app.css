@@ -555,8 +555,17 @@ code.keyword {
   background: var(--hover);
   color: var(--ink);
 }
-.row-actions button.danger {
+.sound-actions button.danger {
   color: var(--red);
+}
+.sound-actions button[disabled] {
+  color: var(--muted-2);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.sound-actions button[disabled]:hover {
+  background: transparent;
+  color: var(--muted-2);
 }
 .row-actions button.danger:hover {
   color: var(--red);
@@ -1634,7 +1643,7 @@ button.ringtone-item {
 }
 .lane {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 2fr);
+  grid-template-columns: calc((100% - 10px) / 2.15) 10px minmax(0, 1fr);
   align-items: stretch;
   height: 34px;
 }
@@ -1676,11 +1685,7 @@ button.ringtone-item {
   color: var(--muted-2);
 }
 .lane-gap {
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  color: var(--muted-2);
-  letter-spacing: 0.2px;
+  display: block;
 }
 .merge-brace {
   display: flex;
@@ -1745,12 +1750,65 @@ button.ringtone-item {
 }
 .compose-actions {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
   margin-top: 14px;
 }
-.compose-actions .muted {
-  font-size: 11px;
+.compose-submit {
+  display: inline-flex;
+  align-items: stretch;
+}
+.compose-btn {
+  min-width: 96px;
+}
+.compose-submit.split .compose-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.compose-play {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: #fff;
+  color: #4a4a52;
+  transition: background 0.14s;
+}
+.compose-play:hover {
+  background: var(--hover);
+}
+.compose-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.compose-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dotJump 0.9s ease-in-out infinite;
+}
+.compose-dots i:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.compose-dots i:nth-child(3) {
+  animation-delay: 0.24s;
+}
+@keyframes dotJump {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 .path-text {
   max-width: 260px;

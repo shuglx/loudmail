@@ -90,7 +90,13 @@ export default function Settings({ config, status, flash, onConfigChange }) {
 
   const openPath = (path) => api.openPath(path).catch((e) => flash(String(e)));
 
-  const tts = config.tts || { enabled: false, modelDir: '', speed: 1 };
+  const tts = config.tts || {
+    enabled: false,
+    provider: 'local',
+    edgeVoice: 'zh-CN-XiaoxiaoNeural',
+    modelDir: '',
+    speed: 1,
+  };
 
   const saveTts = (patch) => saveConfig({ tts: { ...tts, ...patch } });
 
@@ -124,6 +130,22 @@ export default function Settings({ config, status, flash, onConfigChange }) {
       </div>
 
       <div className="settings-stack">
+        
+        <div className="settings-group">
+          <div className="group-head">
+            <h2>系统</h2>
+          </div>
+          <section className="settings-card">
+            <div className="setting-row">
+              <div className="label">
+                <b>开机自启动</b>
+                <small>登录后自动运行</small>
+              </div>
+              <Switch checked={autostart} onChange={toggleAutostart} />
+            </div>
+          </section>
+        </div>
+
         <div className="settings-group">
           <div className="group-head">
             <h2>邮箱</h2>
@@ -202,8 +224,8 @@ export default function Settings({ config, status, flash, onConfigChange }) {
             </div>
             <div className="setting-row">
               <div className="label">
-                <b>模拟数据</b>
-                <small>开发用：不访问真实端口，使用内置样例邮件</small>
+                <b>模拟邮箱 [仅限开发人员调试]</b>
+                <small>不连接真实MCP而是模拟返回数据</small>
               </div>
               <Switch
                 checked={config.behavior.mock}
@@ -223,78 +245,100 @@ export default function Settings({ config, status, flash, onConfigChange }) {
             <div className="setting-row">
               <div className="label">
                 <b>启用文本转语音</b>
-                <small>模型不随应用打包，需另行下载后选择目录</small>
+                <small>用于生成报警语音，录音与文件导入不受影响</small>
               </div>
               <Switch
                 checked={Boolean(tts.enabled)}
                 onChange={(checked) => saveTts({ enabled: checked })}
               />
             </div>
-            <div className="setting-row">
-              <div className="label">
-                <b>模型目录</b>
-                <small>包含 .onnx / tokens.txt / espeak-ng-data</small>
-              </div>
-              <div className="endpoint-actions">
-                <span className="path-text" title={tts.modelDir || '未选择'}>
-                  {tts.modelDir || '未选择'}
-                </span>
-                <button className="btn btn-sm" onClick={pickTtsModelDir}>
-                  选择
-                </button>
-              </div>
-            </div>
-            <div className="setting-row">
-              <div className="label">
-                <b>语速</b>
-                <small>影响生成的人声节奏</small>
-              </div>
-              <select
-                className="control"
-                value={tts.speed}
-                onChange={(e) => saveTts({ speed: Number(e.target.value) })}
-              >
-                <option value={0.8}>0.8×</option>
-                <option value={1}>1.0×</option>
-                <option value={1.2}>1.2×</option>
-                <option value={1.5}>1.5×</option>
-              </select>
-            </div>
-            <div className="setting-row">
-              <div className="label">
-                <b>可用性</b>
-                <small>检查模型目录与必要文件</small>
-              </div>
-              <div className="endpoint-actions">
-                {ttsStatus ? (
-                  <span className={`conn-inline${ttsStatus.ready ? '' : ' off'}`}>
-                    <i />
-                    {ttsStatus.ready ? '就绪' : '不可用'}
-                  </span>
+            {tts.enabled ? (
+              <>
+                <div className="setting-row">
+                  <div className="label">
+                    <b>使用在线服务</b>
+                    <small>开启后使用微软语音服务，需联网；关闭则使用本地模型</small>
+                  </div>
+                  <Switch
+                    checked={tts.provider === 'edge'}
+                    onChange={(checked) => {
+                      setTtsStatus(null);
+                      saveTts({ provider: checked ? 'edge' : 'local' });
+                    }}
+                  />
+                </div>
+                {tts.provider === 'edge' ? (
+                  <div className="setting-row">
+                    <div className="label">
+                      <b>音色选择</b>
+                      <small>选择男声（云扬）或女声（晓晓）</small>
+                    </div>
+                    <select
+                      className="control"
+                      value={tts.edgeVoice || 'zh-CN-XiaoxiaoNeural'}
+                      onChange={(e) => saveTts({ edgeVoice: e.target.value })}
+                    >
+                      <option value="zh-CN-XiaoxiaoNeural">女声（晓晓）</option>
+                      <option value="zh-CN-YunyangNeural">男声（云扬）</option>
+                    </select>
+                  </div>
                 ) : null}
-                <button className="btn btn-sm" onClick={checkTts} disabled={checkingTts}>
-                  {checkingTts ? '检测中…' : '检测'}
-                </button>
-              </div>
-            </div>
-            {ttsStatus && !ttsStatus.ready ? (
-              <p className="form-error inline">{ttsStatus.message}</p>
+                {tts.provider === 'edge' ? null : (
+                  <>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>模型目录</b>
+                        <small>含 .onnx 等文件的模型目录</small>
+                      </div>
+                      <div className="endpoint-actions">
+                        <span className="path-text" title={tts.modelDir || '未选择'}>
+                          {tts.modelDir || '未选择'}
+                        </span>
+                        <button className="btn btn-sm" onClick={pickTtsModelDir}>
+                          选择
+                        </button>
+                      </div>
+                    </div>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>语速</b>
+                        <small>影响生成的人声节奏</small>
+                      </div>
+                      <select
+                        className="control"
+                        value={tts.speed}
+                        onChange={(e) => saveTts({ speed: Number(e.target.value) })}
+                      >
+                        <option value={0.8}>0.8×</option>
+                        <option value={1}>1.0×</option>
+                        <option value={1.2}>1.2×</option>
+                        <option value={1.5}>1.5×</option>
+                      </select>
+                    </div>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>可用性</b>
+                        <small>检查模型目录与必要文件</small>
+                      </div>
+                      <div className="endpoint-actions">
+                        {ttsStatus ? (
+                          <span className={`conn-inline${ttsStatus.ready ? '' : ' off'}`}>
+                            <i />
+                            {ttsStatus.ready ? '就绪' : '不可用'}
+                          </span>
+                        ) : null}
+                        <button className="btn btn-sm" onClick={checkTts} disabled={checkingTts}>
+                          {checkingTts ? '检测中…' : '检测'}
+                        </button>
+                      </div>
+                    </div>
+                    {ttsStatus && !ttsStatus.ready ? (
+                      <p className="form-error inline">{ttsStatus.message}</p>
+                    ) : null}
+                  </>
+                )}
+              </>
             ) : null}
-          </section>
-        </div>
-
-        <div className="settings-group">
-          <div className="group-head">
-            <h2>系统</h2>
-          </div>
-          <section className="settings-card">
-            <div className="setting-row">
-              <div className="label">
-                <b>开机自启动</b>
-                <small>登录后自动运行</small>
-              </div>
-              <Switch checked={autostart} onChange={toggleAutostart} />
-            </div>
           </section>
         </div>
 

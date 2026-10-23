@@ -36,6 +36,18 @@ pub fn cmd_set_config(
     }
     config.tts.model_dir = config.tts.model_dir.trim().to_string();
     config.tts.speed = config.tts.speed.clamp(0.5, 2.0);
+    if !["local", "edge"].contains(&config.tts.provider.as_str()) {
+        return Err("语音来源仅支持 local / edge".into());
+    }
+    config.tts.edge_voice = config.tts.edge_voice.trim().to_string();
+    if config.tts.edge_voice.is_empty() {
+        config.tts.edge_voice = "zh-CN-XiaoxiaoNeural".into();
+    }
+    if !["zh-CN-XiaoxiaoNeural", "zh-CN-YunyangNeural"]
+        .contains(&config.tts.edge_voice.as_str())
+    {
+        return Err("在线音色仅支持晓晓 / 云扬".into());
+    }
     *state.config.write().map_err(|e| e.to_string())? = config.clone();
     state.save_config()?;
     state.config_version.fetch_add(1, Ordering::Relaxed);
@@ -128,6 +140,12 @@ pub fn cmd_tts_status(state: State<'_, Arc<AppState>>) -> TtsStatus {
         return TtsStatus {
             ready: false,
             message: "TTS 未启用，请先开启".into(),
+        };
+    }
+    if config.provider == "edge" {
+        return TtsStatus {
+            ready: true,
+            message: "在线 Edge 语音，需联网".into(),
         };
     }
     match crate::audio::tts::resolve_model(&config.model_dir) {

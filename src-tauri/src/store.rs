@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
+use include_dir::{include_dir, Dir};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;
@@ -9,19 +10,81 @@ use uuid::Uuid;
 use crate::logfile;
 use crate::models::*;
 
-const BUILTINS: [(&str, &str, &[u8], &str); 6] = [
-    ("snd_default", "轻微提示音", include_bytes!("../../alert-sound/1.ogg"), "snd_default.wav"),
-    ("snd_emergency", "普通告警音", include_bytes!("../../alert-sound/2.ogg"), "snd_emergency.wav"),
-    ("snd_notice", "紧急告警音", include_bytes!("../../alert-sound/3.ogg"), "snd_notice.wav"),
-    ("snd_fire", "火灾告警音", include_bytes!("../../alert-sound/4.ogg"), "snd_fire.wav"),
-    ("snd_gas", "气体告警音", include_bytes!("../../alert-sound/5.ogg"), "snd_gas.wav"),
-    ("snd_buzzer", "蜂鸣告警音", include_bytes!("../../alert-sound/6.ogg"), "snd_buzzer.wav"),
+/// 编译期嵌入源码里的 alert-sound 目录：目录中放什么音频，运行时就有哪些内置铃声
+static ALERT_SOUNDS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../alert-sound");
+
+/// 旧版内置铃声 ID → 新的文件名（文件名同时作为语音名与 ID）
+const LEGACY_IDS: [(&str, &str); 5] = [
+    ("snd_default", "轻微提示音"),
+    ("snd_emergency", "普通告警音"),
+    ("snd_notice", "紧急告警音"),
+    ("snd_fire", "火灾告警音"),
+    ("snd_gas", "气体告警音"),
 ];
 
-/// v4 新增的内置语音 ID，只对旧数据补齐这些，不复活用户已删除的旧内置语音
-const ADDED_IN_V4: [&str; 3] = ["snd_fire", "snd_gas", "snd_buzzer"];
+/// 旧内置 ID 对应的新内置 ID（文件名），用于迁移历史策略引用
+pub fn legacy_builtin_id(id: &str) -> Option<&'static str> {
+    LEGACY_IDS
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map(|(_, new)| *new)
+}
 
-const SOUNDS_VERSION: u32 = 4;
+#[derive(Clone, Debug)]
+pub struct BuiltinSound {
+    /// 文件名（不含扩展名）同时作为语音 ID 与展示名
+    pub id: String,
+    pub name: String,
+    pub bytes: &'static [u8],
+    pub filename: String,
+}
+
+/// 扫描内置铃声目录：文件名（不含扩展名）即语音名与 ID
+pub fn builtins() -> Vec<BuiltinSound> {
+    let mut files: Vec<_> = ALERT_SOUNDS.files().collect();
+    files.sort_by(|a, b| a.path().cmp(b.path()));
+
+    let mut found: Vec<BuiltinSound> = Vec::new();
+    for file in files {
+        let path = file.path();
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        if !matches!(ext.as_str(), "ogg" | "wav" | "mp3") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().to_string()) else {
+            continue;
+        };
+        if found.iter().any(|item| item.id == stem) {
+            continue;
+        }
+        found.push(BuiltinSound {
+            filename: format!("{stem}.wav"),
+            name: stem.clone(),
+            id: stem,
+            bytes: file.contents(),
+        });
+    }
+
+    // 早期 5 个固定铃声保持原有顺序，其余按文件名排序
+    let rank = |id: &str| {
+        LEGACY_IDS
+            .iter()
+            .position(|(_, new)| *new == id)
+            .unwrap_or(LEGACY_IDS.len())
+    };
+    found.sort_by(|a, b| rank(&a.id).cmp(&rank(&b.id)).then_with(|| a.id.cmp(&b.id)));
+    found
+}
+
+/// 内置铃声由源码目录统一管理：不可删除、不可重命名，且是录音 / TTS 合成时的唯一铃声素材
+pub fn is_protected_builtin(id: &str) -> bool {
+    builtins().iter().any(|item| item.id == id)
+}
+
+const SOUNDS_VERSION: u32 = 7;
 
 #[derive(Clone, Debug)]
 pub struct AppPaths {
@@ -80,7 +143,7 @@ pub fn load_config(paths: &AppPaths) -> AppConfig {
         cfg.scan.interval_sec = 60;
     }
     if ![10, 30, 60].contains(&cfg.scan.lookback_min) {
-        cfg.scan.lookback_min = 60;
+        cfg.scan.lookback_min = 10;
     }
     cfg
 }
@@ -90,9 +153,21 @@ pub fn save_config(paths: &AppPaths, cfg: &AppConfig) -> Result<(), String> {
 }
 
 pub fn load_strategies(paths: &AppPaths) -> Vec<Strategy> {
-    read_json::<StrategiesFile>(&paths.strategies)
+    let mut items = read_json::<StrategiesFile>(&paths.strategies)
         .map(|f| f.items)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // 内置铃声 ID 改为文件名后，同步迁移历史策略里的引用
+    let mut migrated = false;
+    for item in items.iter_mut() {
+        if let Some(new_id) = item.sound_id.as_deref().and_then(legacy_builtin_id) {
+            item.sound_id = Some(new_id.to_string());
+            migrated = true;
+        }
+    }
+    if migrated {
+        let _ = save_strategies(paths, &items);
+    }
+    items
 }
 
 pub fn save_strategies(paths: &AppPaths, items: &[Strategy]) -> Result<(), String> {
@@ -130,31 +205,73 @@ pub fn load_sounds(paths: &AppPaths) -> Vec<SoundItem> {
     let Some(mut file) = read_json::<SoundsFile>(&paths.sounds_json) else {
         return Vec::new();
     };
+    let mut changed = false;
+
+    if file.version < 5 {
+        // v5：移除蜂鸣告警音
+        let removed = file.items.iter().any(|item| item.id == "snd_buzzer");
+        file.items.retain(|item| item.id != "snd_buzzer");
+        if removed {
+            let _ = fs::remove_file(paths.sounds_dir.join("snd_buzzer.wav"));
+        }
+        changed = true;
+    }
+
     if file.version < SOUNDS_VERSION {
-        // v2/v3：内置语音改名；仅当名称仍是旧默认值时迁移，避免覆盖用户自定义名称
+        // v7：内置铃声 ID 改为文件名，迁移旧固定 ID
         for item in file.items.iter_mut() {
-            let renamed = match item.id.as_str() {
-                "snd_default" if item.name == "默认警报" || item.name == "提示音" => {
-                    Some("轻微提示音")
-                }
-                "snd_emergency" if item.name == "紧急警报" => Some("普通告警音"),
-                "snd_notice" if item.name == "提示音" => Some("紧急告警音"),
-                _ => None,
-            };
-            if let Some(name) = renamed {
-                item.name = name.to_string();
+            if item.source != "builtin" {
+                continue;
+            }
+            if let Some(new_id) = legacy_builtin_id(&item.id) {
+                item.id = new_id.to_string();
             }
         }
         file.version = SOUNDS_VERSION;
-        // v4：补齐新增的内置铃声（用户已存在的其他内置语音不受影响）
-        for (id, name, bytes, filename) in BUILTINS {
-            if !ADDED_IN_V4.contains(&id) || file.items.iter().any(|item| item.id == id) {
-                continue;
+        changed = true;
+    }
+
+    let defs = builtins();
+
+    // 目录中已删除的内置铃声同步移除（含测试残留）
+    let mut index = 0;
+    while index < file.items.len() {
+        let stale = file.items[index].source == "builtin"
+            && !defs.iter().any(|def| def.id == file.items[index].id);
+        if stale {
+            let removed = file.items.remove(index);
+            let _ = fs::remove_file(paths.sounds_dir.join(&removed.file));
+            changed = true;
+        } else {
+            index += 1;
+        }
+    }
+
+    // 以目录为准生成 / 刷新内置铃声：新增文件自动注册，素材替换后时长同步更新
+    for def in &defs {
+        let Some(mut item) = build_builtin_sound(paths, def) else {
+            continue;
+        };
+        match file.items.iter_mut().find(|existing| existing.id == item.id) {
+            Some(existing) => {
+                item.created_at = existing.created_at.clone();
+                let duration_ms = item.duration_ms;
+                let old_item = std::mem::replace(existing, item);
+                if old_item.file != def.filename {
+                    let _ = fs::remove_file(paths.sounds_dir.join(old_item.file));
+                }
+                if old_item.name != def.name || old_item.duration_ms != duration_ms {
+                    changed = true;
+                }
             }
-            if let Some(item) = build_builtin_sound(paths, id, name, bytes, filename) {
+            None => {
                 file.items.push(item);
+                changed = true;
             }
         }
+    }
+
+    if changed {
         let _ = save_sounds(paths, &file.items);
     }
     file.items
@@ -171,30 +288,22 @@ pub fn save_sounds(paths: &AppPaths, items: &[SoundItem]) -> Result<(), String> 
 }
 
 fn ensure_builtin_sounds(paths: &AppPaths) {
-    // 仅在首次运行时写入内置语音；用户之后删除内置语音也不会被重新加回来
+    // 仅在首次运行时写入内置语音；之后由 load_sounds 按目录补齐
     if paths.sounds_json.exists() {
         return;
     }
-    let items: Vec<SoundItem> = BUILTINS
+    let items: Vec<SoundItem> = builtins()
         .iter()
-        .filter_map(|(id, name, bytes, filename)| {
-            build_builtin_sound(paths, id, name, bytes, filename)
-        })
+        .filter_map(|def| build_builtin_sound(paths, def))
         .collect();
     if let Err(e) = save_sounds(paths, &items) {
         logfile::error(format!("保存内置语音元数据失败: {e}"));
     }
 }
 
-fn build_builtin_sound(
-    paths: &AppPaths,
-    id: &str,
-    name: &str,
-    bytes: &[u8],
-    filename: &str,
-) -> Option<SoundItem> {
-    let target = paths.sounds_dir.join(filename);
-    let duration_ms = match crate::audio::convert::decode_bytes_to_wav(bytes) {
+fn build_builtin_sound(paths: &AppPaths, def: &BuiltinSound) -> Option<SoundItem> {
+    let target = paths.sounds_dir.join(&def.filename);
+    let duration_ms = match crate::audio::convert::decode_bytes_to_wav(def.bytes) {
         Ok((wav, ms)) => {
             if let Err(e) = fs::write(&target, wav) {
                 logfile::error(format!("写入内置语音失败 {}: {e}", target.display()));
@@ -203,14 +312,14 @@ fn build_builtin_sound(
             ms
         }
         Err(e) => {
-            logfile::error(format!("转换内置语音失败 {id}: {e}"));
+            logfile::error(format!("转换内置语音失败 {}: {e}", def.id));
             return None;
         }
     };
     Some(SoundItem {
-        id: id.to_string(),
-        name: name.to_string(),
-        file: filename.to_string(),
+        id: def.id.clone(),
+        name: def.name.clone(),
+        file: def.filename.clone(),
         duration_ms,
         source: "builtin".into(),
         created_at: now_iso(),

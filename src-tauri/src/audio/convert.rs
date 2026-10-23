@@ -12,9 +12,8 @@ use symphonia::core::probe::Hint;
 const MAX_INPUT_BYTES: usize = 20 * 1024 * 1024;
 const MAX_DURATION_MS: u64 = 120_000;
 
-/// 将任意受支持的音频解码为单声道 16-bit PCM WAV。
-/// 返回 (wav bytes, duration_ms)。
-pub fn decode_bytes_to_wav(input: &[u8]) -> Result<(Vec<u8>, u64), String> {
+/// 将任意受支持的音频解码为单声道浮点采样。
+pub fn decode_to_mono(input: &[u8]) -> Result<(Vec<f32>, u32), String> {
     if input.is_empty() {
         return Err("音频文件为空".into());
     }
@@ -86,6 +85,14 @@ pub fn decode_bytes_to_wav(input: &[u8]) -> Result<(Vec<u8>, u64), String> {
         return Err("音频超过 120 秒".into());
     }
 
+    Ok((mono, sample_rate))
+}
+
+/// 将任意受支持的音频解码为单声道 16-bit PCM WAV。
+/// 返回 (wav bytes, duration_ms)。
+pub fn decode_bytes_to_wav(input: &[u8]) -> Result<(Vec<u8>, u64), String> {
+    let (mono, sample_rate) = decode_to_mono(input)?;
+    let duration_ms = (mono.len() as u64 * 1000) / sample_rate.max(1) as u64;
     let wav_spec = hound::WavSpec {
         channels: 1,
         sample_rate,

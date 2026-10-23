@@ -27,9 +27,18 @@ pub struct AppState {
 impl AppState {
     pub fn load(app: AppHandle, paths: AppPaths) -> Result<Arc<Self>, String> {
         let config = store::load_config(&paths);
-        let strategies = store::load_strategies(&paths);
+        let mut strategies = store::load_strategies(&paths);
         let history = store::load_history(&paths);
         let sounds = store::load_sounds(&paths);
+        // 语音被移除（如内置铃声下线）时，停用引用它的策略，避免无声报警
+        for item in &mut strategies {
+            if let Some(id) = item.sound_id.as_deref() {
+                if !sounds.iter().any(|sound| sound.id == id) {
+                    item.sound_id = None;
+                    item.enabled = false;
+                }
+            }
+        }
         let mut seen = HashSet::new();
         for record in &history {
             seen.insert(record.mail_id.clone());

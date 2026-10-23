@@ -19,15 +19,31 @@ pub struct AppConfig {
 #[serde(rename_all = "camelCase")]
 pub struct TtsConfig {
     pub enabled: bool,
+    /// 语音来源：local（本地模型） / edge（微软在线语音）
+    #[serde(default = "default_tts_provider")]
+    pub provider: String,
+    /// 在线语音音色（edge 模式使用）
+    #[serde(default = "default_edge_voice")]
+    pub edge_voice: String,
     /// 外置模型目录（包含 .onnx / tokens.txt / espeak-ng-data）
     pub model_dir: String,
     pub speed: f32,
+}
+
+fn default_tts_provider() -> String {
+    "local".into()
+}
+
+fn default_edge_voice() -> String {
+    "zh-CN-XiaoxiaoNeural".into()
 }
 
 impl Default for TtsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            provider: default_tts_provider(),
+            edge_voice: default_edge_voice(),
             model_dir: String::new(),
             speed: 1.0,
         }
@@ -65,7 +81,7 @@ impl Default for AppConfig {
             },
             scan: ScanConfig {
                 interval_sec: 60,
-                lookback_min: 60,
+                lookback_min: 10,
             },
             behavior: BehaviorConfig {
                 autostart: false,

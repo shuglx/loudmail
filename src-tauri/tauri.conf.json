@@ -20,7 +20,9 @@
     "allowlist": {
       "all": false,
       "window": {
-        "startDragging": true
+        "startDragging": true,
+        "maximize": true,
+        "unmaximize": true
       },
       "shell": {
         "open": true

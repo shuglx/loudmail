@@ -1,74 +1,158 @@
-name: Release
+name: Release (deb / dmg)
 
 on:
+  # 只有发 Release(推 v* 标签)才构建；推 main 的日常提交不触发
   push:
-    tags:
-      - "v*"
+    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+# 两个平台各一个 job：Linux 目标机出 deb(麒麟 arm64)，macOS(M 系列)出 dmg
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
-          - platform: ubuntu-22.04
-            target: ""
-            args: ""
-    runs-on: ${{ matrix.platform }}
-    timeout-minutes: 60
-
+  # ---------------------------------------------------------------- Linux(麒麟)
+  build-deb:
+    runs-on: ubuntu-24.04-arm
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      # fetch-depth: 0 —— 生成 Release 说明时要读标签说明和上一个标签(compare 链接)
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev \
-            patchelf
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install npm dependencies
+      - name: Install frontend deps
         run: npm ci
 
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build frontend (vite)
+        run: npm run build
+
+      # cargo 缓存(容器内外共享目录)
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            .ci-cache/cargo/registry
+            .ci-cache/cargo/git
+            src-tauri/target
+          key: cargo-arm64-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-arm64-
+
+      # 构建镜像要拉 ubuntu:20.04 + apt 装包，Docker Hub 限流/apt 源抖动都可能导致
+      # 偶发失败(代码无关)，这里重试三次
+      - name: Build focal build image
+        run: |
+          for i in 1 2 3; do
+            echo "第 $i 次尝试构建镜像"
+            if docker build -t loudmail-build -f docker/Dockerfile.build docker/; then
+              exit 0
+            fi
+            [ "$i" = 3 ] && exit 1
+            sleep 30
+          done
+
+      - name: Build binary in focal container
+        run: |
+          mkdir -p .ci-cache/cargo/registry .ci-cache/cargo/git
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$PWD/.ci-cache/cargo/registry:/root/.cargo/registry" \
+            -v "$PWD/.ci-cache/cargo/git:/root/.cargo/git" \
+            loudmail-build \
+            cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Package deb
+        run: |
+          chmod +x scripts/package-deb.sh
+          ./scripts/package-deb.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: loudmail-arm64-deb
+          path: dist-deb/*.deb
+
+      # Release 说明 = 标签说明(打 tag 时写的 -m 内容) + Full Changelog 链接
+      - name: 生成 Release 说明
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          {
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME"
+            prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+            if [ -n "$prev" ]; then
+              printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+                "$GITHUB_REPOSITORY" "$prev" "$GITHUB_REF_NAME"
+            fi
+          } > release-notes.md
+          echo "----- Release 说明 -----"
+          cat release-notes.md
+
+      # 打 tag(v*)时创建 GitHub Release 并附上 deb
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-deb/*.deb
+          body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------- macOS(M 系列)
+  build-dmg:
+    runs-on: macos-14 # Apple Silicon(M 系列)，无需交叉编译
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "LoudMail ${{ github.ref_name }}"
-          releaseBody: "邮件到达报警工具。请按平台下载安装包；macOS 未签名版本首次打开需在「系统设置 → 隐私与安全性」中允许。"
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-macos-arm64-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-macos-arm64-
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # --bundles 覆盖 tauri.conf.json 里的 targets(那边是给 Linux 的 deb 用的)
+      # 只出 .app，交给 package-dmg.sh 做 ad-hoc 签名并打 dmg
+      - name: Build app (arm64)
+        run: npx tauri build --bundles app
+
+      - name: Sign & package dmg
+        run: |
+          chmod +x scripts/package-dmg.sh
+          ./scripts/package-dmg.sh
+
+      - name: Show artifacts
+        run: |
+          ls -lh src-tauri/target/release/bundle/macos/ || true
+          ls -lh dist-dmg/*.dmg || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: loudmail-macos-arm64-dmg
+          path: dist-dmg/*.dmg
+
+      # tag 时把 dmg 一起附到同一个 Release(不重复生成 release notes)
+      - name: Attach dmg to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-dmg/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

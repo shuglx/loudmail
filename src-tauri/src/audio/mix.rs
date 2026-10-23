@@ -4,8 +4,8 @@ use std::path::Path;
 pub const TARGET_RATE: u32 = 44_100;
 /// 合成语音总时长上限
 pub const MAX_TOTAL_MS: u64 = 120_000;
-/// 铃声与人声之间的静音间隔
-pub const GAP_MS: u64 = 300;
+/// 每段音频之间的静音间隔（铃声每段之间、铃声与人声之间）
+pub const GAP_MS: u64 = 500;
 
 pub struct Pcm {
     pub samples: Vec<f32>,
@@ -71,7 +71,8 @@ pub fn resample(pcm: &Pcm, target: u32) -> Vec<f32> {
     out
 }
 
-/// 铃声循环 N 次 → 300ms 静音 → 人声
+/// 铃声在第 N 段后和人声之前都会插入 GAP_MS 静音，避免相邻片段黏连
+/// 例如：铃声 → 静音 → 铃声 → 静音 → 人声
 pub fn compose(ringtone: Option<&Pcm>, loops: u8, voice: &Pcm) -> Result<(Vec<f32>, u64), String> {
     let voice_samples = resample(voice, TARGET_RATE);
     let gap = vec![0f32; (TARGET_RATE as u64 * GAP_MS / 1000) as usize];
@@ -81,8 +82,8 @@ pub fn compose(ringtone: Option<&Pcm>, loops: u8, voice: &Pcm) -> Result<(Vec<f3
         let ring = resample(ringtone, TARGET_RATE);
         for _ in 0..loops.clamp(1, 5) {
             out.extend_from_slice(&ring);
+            out.extend_from_slice(&gap);
         }
-        out.extend_from_slice(&gap);
     }
     out.extend_from_slice(&voice_samples);
 
@@ -141,7 +142,9 @@ mod tests {
         let ring = pcm(TARGET_RATE, 1000);
         let voice = pcm(TARGET_RATE, 2000);
         let (out, ms) = compose(Some(&ring), 2, &voice).unwrap();
-        assert_eq!(out.len(), 1000 * 2 + 13_230 + 2000);
+        let gap = (TARGET_RATE as u64 * GAP_MS / 1000) as usize;
+        // 每段铃声后都插入间隔，最后一段与人声之间也有一段
+        assert_eq!(out.len(), 1000 * 2 + gap * 2 + 2000);
         assert!(ms > 0);
     }
 }

@@ -1288,7 +1288,7 @@ select.control:focus {
   table-layout: fixed;
 }
 .help-table th {
-  text-align: left;
+  text-align: center;
   font-size: 11px;
   font-weight: 600;
   color: var(--muted-2);
@@ -1302,7 +1302,8 @@ select.control:focus {
 .help-table td {
   padding: 10px;
   border-bottom: 1px solid var(--line);
-  vertical-align: top;
+  vertical-align: middle;
+  text-align: center;
   color: var(--muted);
   line-height: 1.7;
 }
@@ -1310,6 +1311,10 @@ select.control:focus {
   color: var(--text);
   font-weight: 550;
   white-space: nowrap;
+}
+/* 功能说明列左对齐，仅表头居中 */
+.help-table td:nth-child(2) {
+  text-align: left;
 }
 .help-table tbody tr:last-child td {
   border-bottom: none;

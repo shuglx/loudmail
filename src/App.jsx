@@ -340,7 +340,7 @@ export default function App() {
 
       <Modal
         open={helpOpen}
-        title="LoudMail 使用说明"
+        title="使用说明"
         wide
         onClose={() => setHelpOpen(false)}
         footer={

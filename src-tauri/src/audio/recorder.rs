@@ -140,7 +140,7 @@ fn record_thread(
         let _ = ready_tx.send(Ok(()));
 
         let started = Instant::now();
-        let _ = stop_rx.recv_timeout(Duration::from_secs(60));
+        let _ = stop_rx.recv_timeout(Duration::from_secs(15));
         drop(stream);
 
         let interleaved = samples.lock().map(|b| b.clone()).unwrap_or_default();

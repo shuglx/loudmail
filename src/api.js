@@ -21,7 +21,15 @@ export const api = {
   renameSound: (id, name) => invoke('cmd_rename_sound', { id, name }),
   deleteSound: (id) => invoke('cmd_delete_sound', { id }),
   previewSound: (id) => invoke('cmd_preview_sound', { id }),
+  previewTemp: (path) => invoke('cmd_preview_temp', { path }),
+  ttsGenerate: (text) => invoke('cmd_tts_generate', { text }),
+  composeAudio: (voicePath, ringtoneId, loops) =>
+    invoke('cmd_compose_audio', { voicePath, ringtoneId, loops }),
+  saveComposedSound: (tempPath, name, source) =>
+    invoke('cmd_save_composed_sound', { tempPath, name, source }),
   stopPlayback: () => invoke('cmd_stop_playback'),
+  ttsStatus: () => invoke('cmd_tts_status'),
+  pickTtsModelDir: () => invoke('cmd_pick_tts_model_dir'),
   testConnection: (host, port) => invoke('cmd_test_connection', { host, port }),
   getRuntimeStatus: () => invoke('cmd_get_runtime_status'),
   getAutostart: () => invoke('cmd_get_autostart'),

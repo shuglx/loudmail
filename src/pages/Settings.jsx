@@ -12,6 +12,8 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [appInfo, setAppInfo] = useState(null);
+  const [ttsStatus, setTtsStatus] = useState(null);
+  const [checkingTts, setCheckingTts] = useState(false);
 
   useEffect(() => {
     if (!config) return;
@@ -87,6 +89,33 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   };
 
   const openPath = (path) => api.openPath(path).catch((e) => flash(String(e)));
+
+  const tts = config.tts || { enabled: false, modelDir: '', speed: 1 };
+
+  const saveTts = (patch) => saveConfig({ tts: { ...tts, ...patch } });
+
+  const pickTtsModelDir = async () => {
+    try {
+      const dir = await api.pickTtsModelDir();
+      if (dir) {
+        await saveTts({ modelDir: dir });
+        setTtsStatus(null);
+      }
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
+  const checkTts = async () => {
+    setCheckingTts(true);
+    try {
+      setTtsStatus(await api.ttsStatus());
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      setCheckingTts(false);
+    }
+  };
 
   return (
     <section className="page">
@@ -183,6 +212,74 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                 }
               />
             </div>
+          </section>
+        </div>
+
+        <div className="settings-group">
+          <div className="group-head">
+            <h2>语音合成（TTS）</h2>
+          </div>
+          <section className="settings-card">
+            <div className="setting-row">
+              <div className="label">
+                <b>启用文本转语音</b>
+                <small>模型不随应用打包，需另行下载后选择目录</small>
+              </div>
+              <Switch
+                checked={Boolean(tts.enabled)}
+                onChange={(checked) => saveTts({ enabled: checked })}
+              />
+            </div>
+            <div className="setting-row">
+              <div className="label">
+                <b>模型目录</b>
+                <small>包含 .onnx / tokens.txt / espeak-ng-data</small>
+              </div>
+              <div className="endpoint-actions">
+                <span className="path-text" title={tts.modelDir || '未选择'}>
+                  {tts.modelDir || '未选择'}
+                </span>
+                <button className="btn btn-sm" onClick={pickTtsModelDir}>
+                  选择
+                </button>
+              </div>
+            </div>
+            <div className="setting-row">
+              <div className="label">
+                <b>语速</b>
+                <small>影响生成的人声节奏</small>
+              </div>
+              <select
+                className="control"
+                value={tts.speed}
+                onChange={(e) => saveTts({ speed: Number(e.target.value) })}
+              >
+                <option value={0.8}>0.8×</option>
+                <option value={1}>1.0×</option>
+                <option value={1.2}>1.2×</option>
+                <option value={1.5}>1.5×</option>
+              </select>
+            </div>
+            <div className="setting-row">
+              <div className="label">
+                <b>可用性</b>
+                <small>检查模型目录与必要文件</small>
+              </div>
+              <div className="endpoint-actions">
+                {ttsStatus ? (
+                  <span className={`conn-inline${ttsStatus.ready ? '' : ' off'}`}>
+                    <i />
+                    {ttsStatus.ready ? '就绪' : '不可用'}
+                  </span>
+                ) : null}
+                <button className="btn btn-sm" onClick={checkTts} disabled={checkingTts}>
+                  {checkingTts ? '检测中…' : '检测'}
+                </button>
+              </div>
+            </div>
+            {ttsStatus && !ttsStatus.ready ? (
+              <p className="form-error inline">{ttsStatus.message}</p>
+            ) : null}
           </section>
         </div>
 

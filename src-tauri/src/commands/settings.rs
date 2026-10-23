@@ -34,6 +34,8 @@ pub fn cmd_set_config(
     if ![10, 30, 60].contains(&config.scan.lookback_min) {
         return Err("检索时间窗仅支持 10 / 30 / 60 分钟".into());
     }
+    config.tts.model_dir = config.tts.model_dir.trim().to_string();
+    config.tts.speed = config.tts.speed.clamp(0.5, 2.0);
     *state.config.write().map_err(|e| e.to_string())? = config.clone();
     state.save_config()?;
     state.config_version.fetch_add(1, Ordering::Relaxed);
@@ -103,6 +105,41 @@ pub fn cmd_open_path(path: String) -> Result<(), String> {
     }
     logfile::info(format!("打开路径: {path}"));
     open::that(target).map_err(|e| format!("打开失败: {e}"))
+}
+
+#[tauri::command]
+pub async fn cmd_pick_tts_model_dir(app: AppHandle) -> Result<Option<String>, String> {
+    if let Some(window) = app.get_window("main") {
+        let _ = window.set_focus();
+    }
+    Ok(tauri::api::dialog::blocking::FileDialogBuilder::new()
+        .pick_folder()
+        .map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+pub fn cmd_tts_status(state: State<'_, Arc<AppState>>) -> TtsStatus {
+    let config = state
+        .config
+        .read()
+        .map(|c| c.tts.clone())
+        .unwrap_or_default();
+    if !config.enabled {
+        return TtsStatus {
+            ready: false,
+            message: "TTS 未启用，请先开启".into(),
+        };
+    }
+    match crate::audio::tts::resolve_model(&config.model_dir) {
+        Ok(_) => TtsStatus {
+            ready: true,
+            message: "模型已就绪".into(),
+        },
+        Err(e) => TtsStatus {
+            ready: false,
+            message: e,
+        },
+    }
 }
 
 #[tauri::command]

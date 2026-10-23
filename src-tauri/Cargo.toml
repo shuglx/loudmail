@@ -36,6 +36,8 @@ auto-launch = "0.5"
 dirs = "5.0"
 # 用系统默认程序打开数据文件 / 目录 / 链接
 open = "3.2"
+# 本地 TTS（模型文件外置，首次构建会拉取预编译静态库）
+sherpa-onnx = "1.13.8"
 
 [features]
 default = ["custom-protocol"]

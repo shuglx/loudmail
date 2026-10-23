@@ -9,11 +9,19 @@ use uuid::Uuid;
 use crate::logfile;
 use crate::models::*;
 
-const BUILTINS: [(&str, &str, &[u8], &str); 3] = [
-    ("snd_default", "默认警报", include_bytes!("../../alert-sound/1.ogg"), "snd_default.wav"),
-    ("snd_emergency", "紧急警报", include_bytes!("../../alert-sound/2.ogg"), "snd_emergency.wav"),
-    ("snd_notice", "提示音", include_bytes!("../../alert-sound/3.ogg"), "snd_notice.wav"),
+const BUILTINS: [(&str, &str, &[u8], &str); 6] = [
+    ("snd_default", "轻微提示音", include_bytes!("../../alert-sound/1.ogg"), "snd_default.wav"),
+    ("snd_emergency", "普通告警音", include_bytes!("../../alert-sound/2.ogg"), "snd_emergency.wav"),
+    ("snd_notice", "紧急告警音", include_bytes!("../../alert-sound/3.ogg"), "snd_notice.wav"),
+    ("snd_fire", "火灾告警音", include_bytes!("../../alert-sound/4.ogg"), "snd_fire.wav"),
+    ("snd_gas", "气体告警音", include_bytes!("../../alert-sound/5.ogg"), "snd_gas.wav"),
+    ("snd_buzzer", "蜂鸣告警音", include_bytes!("../../alert-sound/6.ogg"), "snd_buzzer.wav"),
 ];
+
+/// v4 新增的内置语音 ID，只对旧数据补齐这些，不复活用户已删除的旧内置语音
+const ADDED_IN_V4: [&str; 3] = ["snd_fire", "snd_gas", "snd_buzzer"];
+
+const SOUNDS_VERSION: u32 = 4;
 
 #[derive(Clone, Debug)]
 pub struct AppPaths {
@@ -119,16 +127,44 @@ pub fn save_history(paths: &AppPaths, items: &[HistoryRecord]) -> Result<(), Str
 
 pub fn load_sounds(paths: &AppPaths) -> Vec<SoundItem> {
     ensure_builtin_sounds(paths);
-    read_json::<SoundsFile>(&paths.sounds_json)
-        .map(|f| f.items)
-        .unwrap_or_default()
+    let Some(mut file) = read_json::<SoundsFile>(&paths.sounds_json) else {
+        return Vec::new();
+    };
+    if file.version < SOUNDS_VERSION {
+        // v2/v3：内置语音改名；仅当名称仍是旧默认值时迁移，避免覆盖用户自定义名称
+        for item in file.items.iter_mut() {
+            let renamed = match item.id.as_str() {
+                "snd_default" if item.name == "默认警报" || item.name == "提示音" => {
+                    Some("轻微提示音")
+                }
+                "snd_emergency" if item.name == "紧急警报" => Some("普通告警音"),
+                "snd_notice" if item.name == "提示音" => Some("紧急告警音"),
+                _ => None,
+            };
+            if let Some(name) = renamed {
+                item.name = name.to_string();
+            }
+        }
+        file.version = SOUNDS_VERSION;
+        // v4：补齐新增的内置铃声（用户已存在的其他内置语音不受影响）
+        for (id, name, bytes, filename) in BUILTINS {
+            if !ADDED_IN_V4.contains(&id) || file.items.iter().any(|item| item.id == id) {
+                continue;
+            }
+            if let Some(item) = build_builtin_sound(paths, id, name, bytes, filename) {
+                file.items.push(item);
+            }
+        }
+        let _ = save_sounds(paths, &file.items);
+    }
+    file.items
 }
 
 pub fn save_sounds(paths: &AppPaths, items: &[SoundItem]) -> Result<(), String> {
     write_json(
         &paths.sounds_json,
         &SoundsFile {
-            version: 1,
+            version: SOUNDS_VERSION,
             items: items.to_vec(),
         },
     )
@@ -139,34 +175,46 @@ fn ensure_builtin_sounds(paths: &AppPaths) {
     if paths.sounds_json.exists() {
         return;
     }
-    let mut items = Vec::new();
-    for (id, name, bytes, filename) in BUILTINS {
-        let target = paths.sounds_dir.join(filename);
-        let duration_ms = match crate::audio::convert::decode_bytes_to_wav(bytes) {
-            Ok((wav, ms)) => {
-                if let Err(e) = fs::write(&target, wav) {
-                    logfile::error(format!("写入内置语音失败 {}: {e}", target.display()));
-                    continue;
-                }
-                ms
-            }
-            Err(e) => {
-                logfile::error(format!("转换内置语音失败 {id}: {e}"));
-                continue;
-            }
-        };
-        items.push(SoundItem {
-            id: id.to_string(),
-            name: name.to_string(),
-            file: filename.to_string(),
-            duration_ms,
-            source: "builtin".into(),
-            created_at: now_iso(),
-        });
-    }
+    let items: Vec<SoundItem> = BUILTINS
+        .iter()
+        .filter_map(|(id, name, bytes, filename)| {
+            build_builtin_sound(paths, id, name, bytes, filename)
+        })
+        .collect();
     if let Err(e) = save_sounds(paths, &items) {
         logfile::error(format!("保存内置语音元数据失败: {e}"));
     }
+}
+
+fn build_builtin_sound(
+    paths: &AppPaths,
+    id: &str,
+    name: &str,
+    bytes: &[u8],
+    filename: &str,
+) -> Option<SoundItem> {
+    let target = paths.sounds_dir.join(filename);
+    let duration_ms = match crate::audio::convert::decode_bytes_to_wav(bytes) {
+        Ok((wav, ms)) => {
+            if let Err(e) = fs::write(&target, wav) {
+                logfile::error(format!("写入内置语音失败 {}: {e}", target.display()));
+                return None;
+            }
+            ms
+        }
+        Err(e) => {
+            logfile::error(format!("转换内置语音失败 {id}: {e}"));
+            return None;
+        }
+    };
+    Some(SoundItem {
+        id: id.to_string(),
+        name: name.to_string(),
+        file: filename.to_string(),
+        duration_ms,
+        source: "builtin".into(),
+        created_at: now_iso(),
+    })
 }
 
 pub fn storage_files(paths: &AppPaths) -> Vec<StorageFile> {

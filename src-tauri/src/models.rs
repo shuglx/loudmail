@@ -11,6 +11,27 @@ pub struct AppConfig {
     pub mcp: McpConfig,
     pub scan: ScanConfig,
     pub behavior: BehaviorConfig,
+    #[serde(default)]
+    pub tts: TtsConfig,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TtsConfig {
+    pub enabled: bool,
+    /// 外置模型目录（包含 .onnx / tokens.txt / espeak-ng-data）
+    pub model_dir: String,
+    pub speed: f32,
+}
+
+impl Default for TtsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model_dir: String::new(),
+            speed: 1.0,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -50,6 +71,7 @@ impl Default for AppConfig {
                 autostart: false,
                 mock: false,
             },
+            tts: TtsConfig::default(),
         }
     }
 }
@@ -236,6 +258,13 @@ pub struct StorageFile {
     pub label: String,
     pub path: String,
     pub kind: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TtsStatus {
+    pub ready: bool,
+    pub message: String,
 }
 
 #[derive(Serialize, Clone, Debug)]

@@ -97,6 +97,7 @@ fn main() {
             app.manage(state.clone());
             scheduler::start(state.clone());
 
+            #[allow(unused_mut)]
             let mut tray = SystemTray::new().with_menu(tray_menu);
             #[cfg(target_os = "macos")]
             {
@@ -153,4 +154,22 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("LoudMail 启动失败");
+}
+
+// ---------------------------------------------------------------------------
+// 麒麟 V10(focal/glibc 2.31/GCC 9)链接垫片
+//
+// sherpa-onnx 的 linux-aarch64 预编译静态库是在 GCC 11+ 环境里编出来的，
+// 目标文件引用了 libstdc++ 6.0.29 才引入的 std::__throw_bad_array_new_length()，
+// 而 focal / 麒麟 V10 SP1 自带的 libstdc++ 只到 6.0.28，于是链接期报
+// `undefined reference to std::__throw_bad_array_new_length()`。
+//
+// 该函数仅在"申请长度超过 PTRDIFF_MAX 的数组"时被调用，语义是抛
+// std::bad_array_new_length；本项目 release 档 panic = abort，用 abort 兜底
+// 不影响正常路径，同时不必给构建镜像塞新工具链、也不会抬高目标机的 libstdc++ 要求。
+// ---------------------------------------------------------------------------
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[export_name = "_ZSt28__throw_bad_array_new_lengthv"]
+pub extern "C" fn throw_bad_array_new_length() -> ! {
+    std::process::abort()
 }

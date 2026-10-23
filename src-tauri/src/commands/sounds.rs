@@ -6,7 +6,7 @@ use tauri::{Manager, State};
 
 use crate::audio::{convert, mix, tts};
 use crate::logfile;
-use crate::models::{PickedFile, RecordingResult, SoundItem};
+use crate::models::{PickedFile, PlaybackStatus, RecordingResult, SoundItem};
 use crate::state::AppState;
 use crate::store;
 
@@ -238,7 +238,66 @@ pub fn cmd_preview_sound(state: State<'_, Arc<AppState>>, id: String) -> Result<
 
 #[tauri::command]
 pub fn cmd_stop_playback(state: State<'_, Arc<AppState>>) {
-    state.player.stop();
+    // 只停止试听，不影响正在播报的报警队列
+    state.player.stop_preview();
+}
+
+#[tauri::command]
+pub fn cmd_get_playback_status(state: State<'_, Arc<AppState>>) -> PlaybackStatus {
+    state.player.status()
+}
+
+/// 模拟模式下向播报队列插入 5 条随机内置语音，便于联调播报队列
+#[tauri::command]
+pub fn cmd_test_playback(state: State<'_, Arc<AppState>>) -> Result<usize, String> {
+    let mock = state
+        .config
+        .read()
+        .map(|c| c.behavior.mock)
+        .unwrap_or(false);
+    if !mock {
+        return Err("仅在模拟邮箱模式下可用".into());
+    }
+
+    let builtins: Vec<SoundItem> = state
+        .sounds
+        .read()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .filter(|s| s.source == "builtin")
+        .cloned()
+        .collect();
+    if builtins.is_empty() {
+        return Err("没有可用的内置语音".into());
+    }
+
+    // 用时间戳做种子的 xorshift，避免额外依赖
+    let mut seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1)
+        | 1;
+
+    let mut names: Vec<String> = Vec::new();
+    for _ in 0..5 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let sound = &builtins[(seed % builtins.len() as u64) as usize];
+        let path = state.paths.sounds_dir.join(&sound.file);
+        if !path.exists() {
+            continue;
+        }
+        state.player.play(path, 1);
+        names.push(sound.name.clone());
+    }
+
+    logfile::info(format!(
+        "[测试] 向播报队列插入 {} 条语音: {}",
+        names.len(),
+        names.join(" / ")
+    ));
+    Ok(names.len())
 }
 
 fn temp_wav_path(state: &AppState, prefix: &str) -> PathBuf {

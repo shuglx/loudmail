@@ -276,6 +276,15 @@ pub struct StorageFile {
     pub kind: String,
 }
 
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackStatus {
+    pub playing: bool,
+    /// 队列中还未开始播放的条数
+    pub pending: usize,
+    pub previewing: bool,
+}
+
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TtsStatus {

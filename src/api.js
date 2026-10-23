@@ -28,6 +28,8 @@ export const api = {
   saveComposedSound: (tempPath, name, source) =>
     invoke('cmd_save_composed_sound', { tempPath, name, source }),
   stopPlayback: () => invoke('cmd_stop_playback'),
+  getPlaybackStatus: () => invoke('cmd_get_playback_status'),
+  testPlayback: () => invoke('cmd_test_playback'),
   ttsStatus: () => invoke('cmd_tts_status'),
   pickTtsModelDir: () => invoke('cmd_pick_tts_model_dir'),
   testConnection: (host, port) => invoke('cmd_test_connection', { host, port }),

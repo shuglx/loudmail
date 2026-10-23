@@ -55,13 +55,17 @@ fn main() {
                         let paused = !state.paused.load(Ordering::Relaxed);
                         state.paused.store(paused, Ordering::Relaxed);
                         if paused {
-                            state.player.stop();
+                            // 暂停：停止当前播报并清空待播队列
+                            state.player.stop_all();
+                        } else {
+                            // 恢复：只播报今后新命中的邮件，跳过暂停期间积压的
+                            state.skip_backlog.store(true, Ordering::Relaxed);
                         }
                         let _ = app.tray_handle().get_item("pause").set_selected(paused);
                         logfile::info(if paused {
                             "[托盘] 已暂停播报，停止轮询匹配"
                         } else {
-                            "[托盘] 已恢复播报，继续轮询匹配"
+                            "[托盘] 已恢复播报，跳过暂停期间的积压邮件"
                         });
                     }
                 }
@@ -133,6 +137,8 @@ fn main() {
             commands::sounds::cmd_delete_sound,
             commands::sounds::cmd_preview_sound,
             commands::sounds::cmd_stop_playback,
+            commands::sounds::cmd_get_playback_status,
+            commands::sounds::cmd_test_playback,
             commands::sounds::cmd_tts_generate,
             commands::sounds::cmd_compose_audio,
             commands::sounds::cmd_save_composed_sound,

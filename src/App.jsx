@@ -88,6 +88,11 @@ export default function App() {
   const [appVersion, setAppVersion] = useState('');
   const [maximized, setMaximized] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [playback, setPlayback] = useState({
+    playing: false,
+    pending: 0,
+    previewing: false,
+  });
   const toastTimer = useRef(null);
 
   const flash = (message) => {
@@ -167,6 +172,34 @@ export default function App() {
       if (unlisten) unlisten();
     };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    api
+      .getPlaybackStatus()
+      .then((value) => {
+        if (!disposed) setPlayback(value);
+      })
+      .catch(() => {});
+    let unlisten = null;
+    listen('player://status', (event) => setPlayback(event.payload))
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  const runTestPlayback = () => {
+    api
+      .testPlayback()
+      .then((count) => flash(`已插入 ${count} 条测试播报`))
+      .catch((e) => flash(String(e)));
+  };
 
   const toggleMaximize = () => {
     api
@@ -294,16 +327,35 @@ export default function App() {
           </nav>
 
           <div className="sidebar-foot">
-            <div className={`conn${status.connected ? '' : ' off'}`}>
-              <span className="dot" />
-              <div>
-                <b>{status.connected ? '已连接' : '未连接'}</b>
-                <small>
-                  {status.connected
-                    ? `${status.serverName || 'CoremailAir'} ${status.serverVersion || ''}`.trim()
-                    : '邮箱 MCP 不可达'}
-                </small>
+            {playback.playing ? (
+              <div className="playback-status" role="status">
+                <span className="pb-ico">
+                  <SpeakerIcon size={13} />
+                </span>
+                <span className="pb-text">播报中 · 待播 {playback.pending} 条</span>
               </div>
+            ) : null}
+            <div className="foot-row">
+              <div className={`conn${status.connected ? '' : ' off'}`}>
+                <span className="dot" />
+                <div>
+                  <b>{status.connected ? '已连接' : '未连接'}</b>
+                  <small>
+                    {status.connected
+                      ? `${status.serverName || 'CoremailAir'} ${status.serverVersion || ''}`.trim()
+                      : '邮箱 MCP 不可达'}
+                  </small>
+                </div>
+              </div>
+              {config?.behavior?.mock ? (
+                <button
+                  className="btn btn-sm test-play-btn"
+                  title="向播报队列插入 5 条随机内置语音"
+                  onClick={runTestPlayback}
+                >
+                  测试
+                </button>
+              ) : null}
             </div>
           </div>
         </aside>

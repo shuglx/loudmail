@@ -20,6 +20,8 @@ pub struct AppState {
     pub seen: Mutex<HashSet<String>>,
     pub config_version: AtomicU64,
     pub paused: AtomicBool,
+    /// 恢复播报后的首轮扫描跳过暂停期间的积压邮件
+    pub skip_backlog: AtomicBool,
     pub player: PlayerHandle,
     pub recorder: RecorderHandle,
 }
@@ -51,6 +53,7 @@ impl AppState {
             mock: config.behavior.mock,
         };
         let recorder = RecorderHandle::new(paths.recordings_dir.clone());
+        let player = start_player(app.clone());
         Ok(Arc::new(Self {
             app,
             paths,
@@ -62,7 +65,8 @@ impl AppState {
             seen: Mutex::new(seen),
             config_version: AtomicU64::new(0),
             paused: AtomicBool::new(false),
-            player: start_player(),
+            skip_backlog: AtomicBool::new(false),
+            player,
             recorder,
         }))
     }

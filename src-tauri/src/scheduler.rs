@@ -71,6 +71,8 @@ fn scan(
     let start = end - ChronoDuration::minutes(config.scan.lookback_min as i64);
     let start_time = start.format("%Y%m%d%H%M%S").to_string();
     let end_time = end.format("%Y%m%d%H%M%S").to_string();
+    // 恢复播报后的首轮扫描：只更新游标，不补播暂停期间的邮件
+    let skip_backlog = state.skip_backlog.swap(false, Ordering::Relaxed);
 
     if config.behavior.mock {
         let source = mock.get_or_insert_with(MockSource::new);
@@ -83,7 +85,7 @@ fn scan(
         });
         for strategy in &enabled {
             match source.search(&strategy.keyword, &start_time, &end_time, 200) {
-                Ok(items) => process_strategy(state, strategy, items),
+                Ok(items) => process_strategy(state, strategy, items, skip_backlog),
                 Err(e) => logfile::error(format!("模拟数据查询失败: {e}")),
             }
         }
@@ -126,7 +128,7 @@ fn scan(
                 c.search(&strategy.keyword, &start_time, &end_time, 200)
             });
         match result {
-            Ok(items) => process_strategy(state, strategy, items),
+            Ok(items) => process_strategy(state, strategy, items, skip_backlog),
             Err(e) => {
                 failure = Some(e);
                 break;
@@ -149,12 +151,22 @@ fn scan(
     Ok(())
 }
 
-fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>) {
+fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>, skip_backlog: bool) {
     let max_seq = items
         .iter()
         .filter_map(|m| m.seq())
         .max()
         .unwrap_or(0);
+
+    if skip_backlog {
+        let next = max_seq.max(strategy.cursor_seq.unwrap_or(0));
+        set_cursor(state, &strategy.id, next);
+        logfile::info(format!(
+            "策略「{}」恢复播报，跳过暂停期间的邮件，游标推进到 {}",
+            strategy.name, next
+        ));
+        return;
+    }
 
     let cursor = match strategy.cursor_seq {
         Some(seq) => seq,

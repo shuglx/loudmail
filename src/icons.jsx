@@ -100,6 +100,24 @@ export const UploadIcon = ({ size }) => (
   </Svg>
 );
 
+/// 导出：文档 + 箭头向右上送出
+export const ExportIcon = ({ size }) => (
+  <Svg size={size}>
+    <path d="M13.5 4H6.5A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20h11a2.5 2.5 0 002.5-2.5V11" />
+    <path d="M21 3l-8.5 8.5" />
+    <path d="M15.4 3H21v5.6" />
+  </Svg>
+);
+
+/// 导入：文档 + 箭头从右上落入文档内
+export const ImportIcon = ({ size }) => (
+  <Svg size={size}>
+    <path d="M13.5 4H6.5A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20h11a2.5 2.5 0 002.5-2.5V11" />
+    <path d="M21 3l-8.5 8.5" />
+    <path d="M17.9 11.5h-5.4V6.1" />
+  </Svg>
+);
+
 export const MicIcon = ({ size }) => (
   <Svg size={size}>
     <rect x="9" y="3" width="6" height="11" rx="3" />

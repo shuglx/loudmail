@@ -137,6 +137,55 @@ pub struct StrategiesFile {
     pub items: Vec<Strategy>,
 }
 
+fn default_play_count() -> u8 {
+    1
+}
+
+/// 导出/导入用的策略条目（不含本地 id、游标等运行时字段）
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyExportItem {
+    pub name: String,
+    #[serde(default)]
+    pub sender: String,
+    pub keyword: String,
+    #[serde(default = "default_true")]
+    pub filter_replies: bool,
+    #[serde(default)]
+    pub sound_id: Option<String>,
+    /// 仅便于人工查看，导入时不作为依据
+    #[serde(default)]
+    pub sound_name: Option<String>,
+    #[serde(default = "default_play_count")]
+    pub play_count: u8,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_export_version() -> u32 {
+    1
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyExportFile {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default = "default_export_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub exported_at: String,
+    #[serde(default)]
+    pub items: Vec<StrategyExportItem>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyImportPreview {
+    pub path: String,
+    pub count: usize,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRecord {

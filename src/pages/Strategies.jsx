@@ -3,7 +3,7 @@ import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Switch from '../components/Switch';
-import { GripIcon, PlayIcon } from '../icons';
+import { ExportIcon, GripIcon, ImportIcon, PlayIcon } from '../icons';
 
 const emptyForm = {
   name: '',
@@ -24,6 +24,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+  const [importTarget, setImportTarget] = useState(null);
 
   const enabledCount = strategies.filter((s) => s.enabled).length;
 
@@ -136,11 +137,52 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
     }
   };
 
+  const exportStrategies = async () => {
+    try {
+      const path = await api.exportStrategies();
+      if (path) flash('策略已导出');
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
+  const pickImportFile = async () => {
+    try {
+      const preview = await api.pickStrategiesFile();
+      if (preview) setImportTarget(preview);
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
+  const confirmImport = async () => {
+    const target = importTarget;
+    setImportTarget(null);
+    if (!target) return;
+    try {
+      const count = await api.importStrategies(target.path);
+      await onRefresh();
+      flash(`已导入 ${count} 条策略`);
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
   return (
     <section className="page">
       <div className="page-head">
         <h1>匹配策略</h1>
         <div className="head-actions">
+          <div className="head-split">
+            <button title="导出策略到 JSON 文件" onClick={exportStrategies}>
+              <ExportIcon size={14} />
+              导出
+            </button>
+            <button title="从 JSON 文件导入策略" onClick={pickImportFile}>
+              <ImportIcon size={14} />
+              导入
+            </button>
+          </div>
           <button className="btn btn-primary" onClick={openCreate}>
             ＋ 新增策略
           </button>
@@ -368,6 +410,15 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
         </div>
         {error ? <p className="form-error">{error}</p> : null}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(importTarget)}
+        title={`导入 ${importTarget?.count ?? 0} 条策略？`}
+        description="导入会替换当前全部策略，顺序与文件一致；本机不存在的语音会被置空，需要重新指定。"
+        confirmText="导入"
+        onCancel={() => setImportTarget(null)}
+        onConfirm={confirmImport}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

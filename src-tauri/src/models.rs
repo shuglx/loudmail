@@ -13,6 +13,13 @@ pub struct AppConfig {
     pub behavior: BehaviorConfig,
     #[serde(default)]
     pub tts: TtsConfig,
+    /// 界面主题：light / dark
+    #[serde(default = "default_theme")]
+    pub theme: String,
+}
+
+fn default_theme() -> String {
+    "light".into()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -88,6 +95,7 @@ impl Default for AppConfig {
                 mock: false,
             },
             tts: TtsConfig::default(),
+            theme: default_theme(),
         }
     }
 }

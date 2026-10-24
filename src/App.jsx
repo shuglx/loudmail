@@ -10,10 +10,12 @@ import Sounds from './pages/Sounds';
 import Strategies from './pages/Strategies';
 import {
   ClockIcon,
+  MoonIcon,
   QuestionIcon,
   ShieldIcon,
   SlidersIcon,
   SpeakerIcon,
+  SunIcon,
 } from './icons';
 
 const PAGES = ['strategies', 'history', 'sounds', 'settings'];
@@ -149,6 +151,17 @@ export default function App() {
     api.getAppInfo().then((info) => setAppVersion(info.version || '')).catch(() => {});
   }, []);
 
+  // 主题：dark / light，跟随配置切换并缓存到 localStorage 避免启动白闪
+  useEffect(() => {
+    const theme = config?.theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('loudmail-theme', theme);
+    } catch {
+      // ignore
+    }
+  }, [config?.theme]);
+
   useEffect(() => {
     let disposed = false;
     const syncMaximized = () => {
@@ -193,6 +206,17 @@ export default function App() {
       if (unlisten) unlisten();
     };
   }, []);
+
+  const isDark = config?.theme === 'dark';
+
+  const toggleTheme = () => {
+    if (!config) return;
+    const next = { ...config, theme: isDark ? 'light' : 'dark' };
+    api
+      .setConfig(next)
+      .then(setConfig)
+      .catch((e) => flash(String(e)));
+  };
 
   const runTestPlayback = () => {
     api
@@ -288,6 +312,14 @@ export default function App() {
           <span className="proto-badge">v{appVersion || '—'}</span>
         </div>
         <div className="titlebar-actions">
+          <button
+            className="icon-btn"
+            title={isDark ? '切换到浅色模式' : '切换到深色模式'}
+            aria-label="切换主题"
+            onClick={toggleTheme}
+          >
+            {isDark ? <SunIcon /> : <MoonIcon />}
+          </button>
           <button
             className="icon-btn help-btn"
             title="使用说明"

@@ -571,7 +571,7 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                                   )
                                 }
                               >
-                                {previewing === 'voice' ? '停止试听' : '试听人声'}
+                                {previewing === 'voice' ? '停止' : '试听'}
                               </button>
                               <button
                                 className="btn"
@@ -599,10 +599,13 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                       </div>
                     ) : (
                       <div className="tts-box">
-                        <div className="tts-hint">
-                          {ttsInfo && !ttsInfo.ready
-                            ? `TTS 不可用：${ttsInfo.message}`
-                            : '输入不超过 50 字，生成后可试听。'}
+                        <div className="tts-hint-row">
+                          <span className="tts-hint">
+                            {ttsInfo && !ttsInfo.ready
+                              ? `TTS 不可用：${ttsInfo.message}`
+                              : '输入播报内容后转为语音'}
+                          </span>
+                          <span className="counter">{draft.ttsText.length} / 50</span>
                         </div>
                         <textarea
                           rows={4}
@@ -614,20 +617,34 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                           }
                         />
                         <div className="tts-actions">
-                          <span className="counter">{draft.ttsText.length} / 50</span>
-                          <button className="btn btn-sm" onClick={generateTts} disabled={draft.ttsBusy}>
-                            {draft.ttsBusy ? '生成中…' : '生成语音'}
-                          </button>
-                          {draft.ttsVoice ? (
+                          <div className={`compose-submit${draft.ttsVoice ? ' split' : ''}`}>
                             <button
-                              className="btn btn-sm"
-                              onClick={() =>
-                                playTemp('voice', draft.ttsVoice.path, draft.ttsVoice.durationMs)
-                              }
+                              className="btn compose-btn"
+                              onClick={generateTts}
+                              disabled={draft.ttsBusy}
                             >
-                              {previewing === 'voice' ? '停止试听' : '试听人声'}
+                              {draft.ttsBusy ? '生成中…' : '生成语音'}
                             </button>
-                          ) : null}
+                            {draft.ttsVoice ? (
+                              <button
+                                className="compose-play"
+                                aria-label="试听生成的人声"
+                                onClick={() =>
+                                  playTemp(
+                                    'voice',
+                                    draft.ttsVoice.path,
+                                    draft.ttsVoice.durationMs
+                                  )
+                                }
+                              >
+                                {previewing === 'voice' ? (
+                                  <StopIcon size={11} />
+                                ) : (
+                                  <PlayIcon size={11} />
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     )}

@@ -1,10 +1,13 @@
 :root {
   --ink: #0a0a0c;
+  --ink-hover: #26262b;
   --text: #16181d;
   --muted: #6d6d76;
   --muted-2: #9a9aa3;
   --bg: #f6f6f7;
   --surface: #ffffff;
+  --surface-2: #fcfcfd;
+  --surface-3: #fafafb;
   --sidebar: #fafafb;
   --line: #eaeaec;
   --line-strong: #e0e0e4;
@@ -146,7 +149,7 @@ button:focus {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   padding: 1px 7px;
-  background: #fbfbfc;
+  background: var(--surface-3);
 }
 .titlebar-actions {
   width: 92px;
@@ -154,6 +157,7 @@ button:focus {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 2px;
 }
 .titlebar-actions .icon-btn {
   width: 24px;
@@ -231,17 +235,17 @@ button:focus {
   background: transparent;
   border-radius: 8px;
   font-size: 12.5px;
-  color: #5b6169;
+  color: var(--muted);
   text-align: left;
   transition: background 0.14s, color 0.14s;
 }
 .nav button:hover {
-  background: #f1f1f3;
+  background: var(--hover);
   color: var(--ink);
 }
 .nav button.active {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .nav-ico {
   width: 16px;
@@ -441,7 +445,7 @@ button:focus {
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   font-size: 12.5px;
   color: var(--text);
@@ -458,16 +462,16 @@ button:focus {
 .btn-primary {
   background: var(--ink);
   border-color: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .btn-primary:hover {
-  background: #26262b;
-  border-color: #26262b;
+  background: var(--ink-hover);
+  border-color: var(--ink-hover);
 }
 .btn-danger {
   color: var(--red);
   border-color: #f2c9c5;
-  background: #fff;
+  background: var(--surface);
 }
 .btn-danger:hover {
   background: var(--red-bg);
@@ -500,7 +504,7 @@ button:focus {
 
 /* ---------- 面板 / 策略表 ---------- */
 .panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow-x: auto;
@@ -515,16 +519,16 @@ button:focus {
   font-size: 11px;
   color: var(--muted-2);
   border-bottom: 1px solid var(--line);
-  background: #fcfcfd;
+  background: var(--surface-2);
   text-align: center;
 }
 .strategy-grid {
   grid-template-columns: 16px minmax(90px, 1.05fr) minmax(125px, 1.45fr) minmax(
       95px,
       1.15fr
-    ) minmax(95px, 0.95fr) 42px 72px;
+    ) minmax(95px, 0.95fr) 42px 100px;
   gap: 10px;
-  min-width: 610px;
+  min-width: 640px;
 }
 .strategy-grid > * {
   min-width: 0;
@@ -543,7 +547,7 @@ button:focus {
   border-bottom: none;
 }
 .strategy-row:hover {
-  background: #fbfbfc;
+  background: var(--surface-3);
 }
 .strategy-row.dragging {
   opacity: 0.4;
@@ -605,7 +609,7 @@ code.keyword {
   background: var(--chip);
   padding: 3px 7px;
   border-radius: 5px;
-  color: #3f3f46;
+  color: var(--chip-text);
   display: inline-block;
   max-width: 100%;
   overflow: hidden;
@@ -639,19 +643,27 @@ code.keyword {
 .row-actions {
   display: flex;
   justify-content: center;
-  gap: 1px;
+  align-items: center;
+  gap: 6px;
 }
 .row-actions button {
-  border: none;
-  background: none;
-  font-size: 11.5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 10.5px;
   color: var(--muted);
-  padding: 5px 6px;
-  border-radius: 5px;
+  border-radius: 6px;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
 .row-actions button:hover {
   background: var(--hover);
   color: var(--ink);
+  border-color: #d4d4d9;
+}
+.row-actions button.danger {
+  color: var(--red);
+  border-color: #f2c9c5;
 }
 .sound-actions button.danger {
   color: var(--red);
@@ -668,6 +680,7 @@ code.keyword {
 .row-actions button.danger:hover {
   color: var(--red);
   background: var(--red-bg);
+  border-color: #edb5b0;
 }
 
 /* ---------- 开关 ---------- */
@@ -688,7 +701,7 @@ code.keyword {
 .switch span {
   width: 100%;
   height: 100%;
-  background: #dfdfe4;
+  background: var(--line-strong);
   border-radius: 999px;
   transition: background 0.16s;
 }
@@ -699,7 +712,7 @@ code.keyword {
   left: 3px;
   width: 14px;
   height: 14px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 50%;
   transition: transform 0.16s;
   box-shadow: 0 1px 2px rgba(10, 10, 12, 0.18);
@@ -726,7 +739,7 @@ code.keyword {
   place-items: center;
   margin: 0 auto 12px;
   color: var(--muted-2);
-  background: #fcfcfd;
+  background: var(--surface-2);
 }
 .empty b {
   display: block;
@@ -748,7 +761,7 @@ code.keyword {
   gap: 7px;
   height: 32px;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   padding: 0 10px;
   width: 270px;
@@ -772,7 +785,7 @@ select.control {
   height: 32px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--surface);
   font-size: 12px;
   padding: 0 8px;
   color: var(--text);
@@ -799,7 +812,7 @@ select.control:focus {
   border-bottom: none;
 }
 .history-row:hover {
-  background: #fbfbfc;
+  background: var(--surface-3);
 }
 .history-time {
   font-size: 11px;
@@ -880,7 +893,7 @@ select.control:focus {
 }
 .pager-actions button.active {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .pager-actions button:disabled {
   opacity: 0.35;
@@ -901,7 +914,7 @@ select.control:focus {
   max-width: 1000px;
 }
 .sound-card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px;
@@ -917,15 +930,15 @@ select.control:focus {
 }
 /* 内置语音：比页面背景更浅的浅灰底，与自建语音的纯白卡片区分 */
 .sound-card.builtin {
-  background: #fafafb;
+  background: var(--surface-3);
   border-color: #e8e8ee;
 }
 .sound-card.builtin:hover {
-  background: #f4f4f7;
+  background: var(--hover);
   border-color: #d8d8dd;
 }
 .sound-card.builtin .tag {
-  background: #eeeef3;
+  background: var(--chip);
 }
 .sound-card.playing {
   border-color: #c9c9cf;
@@ -942,7 +955,7 @@ select.control:focus {
   height: 34px;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--surface);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -951,7 +964,7 @@ select.control:focus {
 }
 .play-btn:hover {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   border-color: var(--ink);
 }
 .sound-title {
@@ -999,7 +1012,7 @@ select.control:focus {
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--surface);
   font-size: 10.5px;
   color: var(--muted);
   border-radius: 6px;
@@ -1067,7 +1080,7 @@ select.control:focus {
   max-width: 840px;
 }
 .settings-card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -1120,7 +1133,7 @@ select.control:focus {
   border-radius: 7px;
   padding: 0 9px;
   font-size: 12px;
-  background: #fff;
+  background: var(--surface);
   outline: none;
 }
 .endpoint input:focus {
@@ -1164,7 +1177,7 @@ select.control:focus {
 }
 .test-result {
   margin: 0 18px 14px;
-  background: #fafafb;
+  background: var(--surface-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px 12px;
@@ -1317,7 +1330,7 @@ select.control:focus {
 .modal {
   width: min(520px, 100%);
   max-height: calc(100vh - 48px);
-  background: #fff;
+  background: var(--surface);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 24px 64px rgba(10, 10, 12, 0.22);
@@ -1361,7 +1374,7 @@ select.control:focus {
   gap: 8px;
   padding: 13px 18px;
   border-top: 1px solid var(--line);
-  background: #fcfcfd;
+  background: var(--surface-2);
 }
 /* ---------- 使用说明 ---------- */
 .help-lead {
@@ -1409,7 +1422,7 @@ select.control:focus {
   border-bottom: none;
 }
 .help-table tbody tr:hover td {
-  background: #fbfbfc;
+  background: var(--surface-3);
 }
 .help-note {
   margin-top: 14px;
@@ -1450,7 +1463,7 @@ select.control:focus {
   border-radius: var(--radius);
   padding: 0 10px;
   font-size: 12.5px;
-  background: #fff;
+  background: var(--surface);
   outline: none;
 }
 .field input:focus,
@@ -1509,7 +1522,7 @@ select.control:focus {
   flex: 1;
   min-width: 0;
   border: none;
-  background: #fff;
+  background: var(--surface);
   height: 32px;
   padding: 0 10px;
   font-size: 12px;
@@ -1521,7 +1534,7 @@ select.control:focus {
 }
 .segmented button.active {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .segmented button:hover:not(.active) {
   background: var(--hover);
@@ -1566,7 +1579,7 @@ select.control:focus {
   resize: vertical;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #fcfcfd;
+  background: var(--surface-2);
   color: var(--text);
   font: inherit;
   font-size: 11.5px;
@@ -1580,7 +1593,7 @@ select.control:focus {
 .dropzone {
   border: 1px dashed #d6d6dc;
   border-radius: 9px;
-  background: #fcfcfd;
+  background: var(--surface-2);
   padding: 26px 18px;
   text-align: center;
   cursor: pointer;
@@ -1588,14 +1601,14 @@ select.control:focus {
 }
 .dropzone:hover {
   border-color: #b9b9c1;
-  background: #f8f8fa;
+  background: var(--hover);
 }
 .dropzone .dz-ico {
   width: 36px;
   height: 36px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #fff;
+  background: var(--surface);
   display: grid;
   place-items: center;
   margin: 0 auto 9px;
@@ -1619,7 +1632,7 @@ select.control:focus {
   border-radius: 8px;
   padding: 9px 11px;
   margin-top: 10px;
-  background: #fafafb;
+  background: var(--surface-3);
 }
 .file-info .fi-ico {
   width: 28px;
@@ -1668,7 +1681,7 @@ select.control:focus {
 .record-wave i {
   width: 3px;
   height: 4px;
-  background: #d2d2d8;
+  background: var(--line-strong);
   border-radius: 2px;
   transition: background 0.2s;
 }
@@ -1716,7 +1729,7 @@ select.control:focus {
   color: var(--muted);
 }
 .seg-tabs button.active {
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(10, 10, 12, 0.08);
 }
@@ -1768,7 +1781,7 @@ select.control:focus {
 .compose-col {
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #fcfcfd;
+  background: var(--surface-2);
   padding: 10px 11px;
   min-width: 0;
 }
@@ -1811,7 +1824,7 @@ select.control:focus {
   height: 24px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   font-size: 11px;
   padding: 0 4px;
 }
@@ -1827,7 +1840,7 @@ select.control:focus {
   min-width: 0;
   height: 28px;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--surface);
   border-radius: 7px;
   overflow: hidden;
 }
@@ -1841,7 +1854,7 @@ button.ringtone-item {
 .ringtone-item.active {
   border-color: var(--ink);
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .ringtone-item .ringtone-name {
   flex: 1;
@@ -1869,7 +1882,7 @@ button.ringtone-item {
 }
 .ringtone-item.active .ringtone-play {
   border-left-color: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  color: var(--surface);
 }
 .compose-track {
   margin-top: 14px;
@@ -1900,20 +1913,20 @@ button.ringtone-item {
   opacity: 0.7;
 }
 .lane-block.ring {
-  background: #ececf0;
-  color: #3f3f47;
+  background: var(--chip);
+  color: var(--chip-text);
 }
 .lane-block.voice {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 .lane-block.voice.empty {
-  background: #fff;
+  background: var(--surface);
   border: 1px dashed var(--line-strong);
   color: var(--muted-2);
 }
 .lane-block.none {
-  background: #fff;
+  background: var(--surface);
   border: 1px dashed var(--line-strong);
   color: var(--muted-2);
 }
@@ -1925,7 +1938,7 @@ button.ringtone-item {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  color: #d2d2d8;
+  color: var(--line-strong);
   margin-top: -1px;
 }
 .brace-svg {
@@ -1957,7 +1970,7 @@ button.ringtone-item {
   resize: vertical;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: 12px;
@@ -1965,21 +1978,30 @@ button.ringtone-item {
   padding: 9px 11px;
   outline: none;
 }
+/* 说明文字与字数统计同一行，统计靠右 */
+.tts-hint-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
 .tts-hint {
+  flex: 1;
+  min-width: 0;
   font-size: 10.5px;
   color: var(--muted-2);
-  margin-bottom: 7px;
+  margin-bottom: 0;
+}
+.tts-hint-row .counter {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--muted-2);
 }
 .tts-actions {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-.tts-actions .counter {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: var(--muted-2);
+  margin-top: 10px;
 }
 .compose-actions {
   display: flex;
@@ -2006,8 +2028,8 @@ button.ringtone-item {
   border: 1px solid var(--line-strong);
   border-left: none;
   border-radius: 0 var(--radius) var(--radius) 0;
-  background: #fff;
-  color: #4a4a52;
+  background: var(--surface);
+  color: var(--chip-text);
   transition: background 0.14s;
 }
 .compose-play:hover {
@@ -2064,7 +2086,7 @@ button.ringtone-item {
   bottom: 30px;
   transform: translateX(-50%) translateY(8px);
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   font-size: 11.5px;
   padding: 9px 14px;
   border-radius: 8px;
@@ -2089,7 +2111,7 @@ button.ringtone-item {
 }
 .content::-webkit-scrollbar-thumb,
 .modal-body::-webkit-scrollbar-thumb {
-  background: #d9d9df;
+  background: var(--line-strong);
   border-radius: 8px;
 }
 .content::-webkit-scrollbar-track,
@@ -2129,4 +2151,119 @@ button.ringtone-item {
   .search {
     width: 200px;
   }
+}
+
+/* ---------- 暗色主题 ---------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ink: #f1f2f4;
+  --ink-hover: #ffffff;
+  --text: #e6e7ea;
+  --muted: #9b9da5;
+  --muted-2: #71737c;
+  --bg: #131418;
+  --surface: #1a1c21;
+  --surface-2: #1f2127;
+  --surface-3: #23262d;
+  --sidebar: #17181d;
+  --line: #2a2d34;
+  --line-strong: #363a42;
+  --hover: #262a31;
+  --chip: #2b2f37;
+  --chip-text: #c3c6cd;
+  --green: #4ade9f;
+  --green-bg: #16302a;
+  --red: #ff7b72;
+  --red-bg: #3a2120;
+  --amber: #f0b429;
+  --amber-bg: #362a12;
+}
+
+:root[data-theme='dark'] ::selection {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* 反色主按钮/选中态在暗色下描边和阴影调整 */
+:root[data-theme='dark'] .btn:hover {
+  border-color: #4a505a;
+}
+:root[data-theme='dark'] .btn-danger {
+  border-color: rgba(255, 123, 114, 0.38);
+}
+:root[data-theme='dark'] .btn-danger:hover {
+  border-color: rgba(255, 123, 114, 0.6);
+  background: var(--red-bg);
+}
+:root[data-theme='dark'] .icon-btn:hover {
+  color: var(--text);
+}
+:root[data-theme='dark'] .overlay {
+  background: rgba(6, 7, 9, 0.62);
+}
+:root[data-theme='dark'] .modal {
+  border: 1px solid var(--line);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme='dark'] .toast {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 开关：关闭时浅色滑块、打开时深色滑块，避免整块变白 */
+:root[data-theme='dark'] .switch span::after {
+  background: #cfd2d9;
+}
+:root[data-theme='dark'] .switch input:checked + span::after {
+  background: #16181d;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* 语音卡片 */
+:root[data-theme='dark'] .sound-card:hover {
+  border-color: #3d434d;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+}
+:root[data-theme='dark'] .sound-card.builtin {
+  border-color: #333842;
+}
+:root[data-theme='dark'] .sound-card.builtin:hover {
+  border-color: #454c58;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='dark'] .sound-actions button:hover {
+  border-color: #4a505a;
+}
+:root[data-theme='dark'] .sound-actions button.danger {
+  border-color: rgba(255, 123, 114, 0.38);
+}
+:root[data-theme='dark'] .sound-actions button.danger:hover {
+  border-color: rgba(255, 123, 114, 0.6);
+}
+:root[data-theme='dark'] .row-actions button:hover {
+  border-color: #4a505a;
+}
+:root[data-theme='dark'] .row-actions button.danger {
+  border-color: rgba(255, 123, 114, 0.38);
+}
+:root[data-theme='dark'] .row-actions button.danger:hover {
+  border-color: rgba(255, 123, 114, 0.6);
+}
+
+/* 上传拖拽区 / 播放状态 / 帮助表格 */
+:root[data-theme='dark'] .dropzone {
+  border-color: #3d434d;
+}
+:root[data-theme='dark'] .dropzone:hover {
+  border-color: #4f5763;
+}
+:root[data-theme='dark'] .playback-status {
+  border-color: #234238;
+}
+:root[data-theme='dark'] .help-table tbody tr:hover td {
+  background: #202329;
+}
+
+/* 滚动条 */
+:root[data-theme='dark'] .content::-webkit-scrollbar-thumb,
+:root[data-theme='dark'] .modal-body::-webkit-scrollbar-thumb {
+  background: #3c414b;
 }

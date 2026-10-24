@@ -34,6 +34,9 @@ pub fn cmd_set_config(
     if ![10, 30, 60].contains(&config.scan.lookback_min) {
         return Err("检索时间窗仅支持 10 / 30 / 60 分钟".into());
     }
+    if !["light", "dark"].contains(&config.theme.as_str()) {
+        return Err("主题仅支持 light / dark".into());
+    }
     config.tts.model_dir = config.tts.model_dir.trim().to_string();
     config.tts.speed = config.tts.speed.clamp(0.5, 2.0);
     if !["local", "edge"].contains(&config.tts.provider.as_str()) {

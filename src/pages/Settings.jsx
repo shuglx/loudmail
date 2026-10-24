@@ -143,6 +143,20 @@ export default function Settings({ config, status, flash, onConfigChange }) {
               </div>
               <Switch checked={autostart} onChange={toggleAutostart} />
             </div>
+            <div className="setting-row">
+              <div className="label">
+                <b>界面主题</b>
+                <small>暗色模式适合夜间值守</small>
+              </div>
+              <select
+                className="control"
+                value={config.theme === 'dark' ? 'dark' : 'light'}
+                onChange={(e) => saveConfig({ theme: e.target.value })}
+              >
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </div>
           </section>
         </div>
 

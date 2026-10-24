@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
-import { SearchIcon, ChevronRightIcon } from '../icons';
+import { SearchIcon, ChevronRightIcon, TrashIcon } from '../icons';
 
 function pageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -84,6 +84,7 @@ export default function History({ history, flash, onCleared }) {
         <h1>播报记录</h1>
         <div className="head-actions">
           <button className="btn" onClick={() => setClearOpen(true)}>
+            <TrashIcon />
             清空记录
           </button>
         </div>

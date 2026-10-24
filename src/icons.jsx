@@ -129,6 +129,28 @@ export const CheckIcon = ({ size = 12 }) => (
   </Svg>
 );
 
+export const SunIcon = ({ size = 15 }) => (
+  <Svg size={size}>
+    <circle cx="12" cy="12" r="4.2" />
+    <path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+  </Svg>
+);
+
+export const MoonIcon = ({ size = 15 }) => (
+  <Svg size={size}>
+    <path d="M20 14.3A8.2 8.2 0 019.7 4a8.4 8.4 0 100 16.8 8.4 8.4 0 0010.3-6.5z" />
+  </Svg>
+);
+
+export const TrashIcon = ({ size = 13 }) => (
+  <Svg size={size}>
+    <path d="M4 7h16" />
+    <path d="M9.5 7V5.2A1.2 1.2 0 0110.7 4h2.6a1.2 1.2 0 011.2 1.2V7" />
+    <path d="M6 7l.9 11.2A1.8 1.8 0 008.7 20h6.6a1.8 1.8 0 001.8-1.8L18 7" />
+    <path d="M10.5 11v5M13.5 11v5" />
+  </Svg>
+);
+
 export const ChevronRightIcon = ({ size = 15 }) => (
   <Svg size={size}>
     <path d="M9 5l7 7-7 7" />

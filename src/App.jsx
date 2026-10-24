@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { appWindow } from '@tauri-apps/api/window';
 import { api } from './api';
+import watermarkUrl from '../icon-shadow.png';
 import Toast from './components/Toast';
 import Modal from './components/Modal';
 import History from './pages/History';
@@ -358,15 +359,27 @@ export default function App() {
             })}
           </nav>
 
+          {/* 侧栏留白处的剪影水印，置于状态区之上 */}
+          <div
+            className="sidebar-mark"
+            style={{ '--watermark': `url(${watermarkUrl})` }}
+            aria-hidden="true"
+          />
+
           <div className="sidebar-foot">
-            {playback.playing ? (
-              <div className="playback-status" role="status">
-                <span className="pb-ico">
-                  <SpeakerIcon size={13} />
-                </span>
-                <span className="pb-text">播报中 · 待播 {playback.pending} 条</span>
-              </div>
-            ) : null}
+            <div
+              className={`playback-status${playback.playing ? '' : ' idle'}`}
+              role="status"
+            >
+              <span className="pb-ico">
+                <SpeakerIcon size={13} />
+              </span>
+              <span className="pb-text">
+                {playback.playing
+                  ? `播报中 · 待播 ${playback.pending} 条`
+                  : '暂无播报'}
+              </span>
+            </div>
             <div className="foot-row">
               <div className={`conn${status.connected ? '' : ' off'}`}>
                 <span className="dot" />

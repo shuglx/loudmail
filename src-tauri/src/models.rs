@@ -197,6 +197,17 @@ pub struct StrategyImportPreview {
     pub count: usize,
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyImportResult {
+    /// 新增的策略条数
+    pub added: usize,
+    /// 按名称覆盖已有策略的条数
+    pub updated: usize,
+    /// 因名称或关键词为空而跳过的条数
+    pub skipped: usize,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRecord {

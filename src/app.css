@@ -185,6 +185,7 @@ button:focus {
 
 /* ---------- 侧栏 ---------- */
 .sidebar {
+  position: relative;
   width: 200px;
   flex-shrink: 0;
   background: var(--sidebar);
@@ -201,9 +202,9 @@ button:focus {
   padding: 0 7px 18px;
 }
 .brand img {
-  width: 29px;
-  height: 29px;
-  border-radius: 8px;
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
   object-fit: cover;
   display: block;
 }
@@ -260,9 +261,12 @@ button:focus {
   opacity: 1;
 }
 
+/* 预留播报状态条的高度：状态出现/消失时底部区域高度不变，
+   上方的剪影水印因此不会上下移动 */
 .sidebar-foot {
   margin-top: auto;
   padding: 12px 7px 0;
+  min-height: 100px;
 }
 /* 播报状态：闪烁喇叭 + 待播条数 */
 .playback-status {
@@ -278,11 +282,20 @@ button:focus {
   line-height: 1.4;
   color: var(--green);
 }
+.playback-status.idle {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--muted-2);
+}
 .pb-ico {
   display: grid;
   place-items: center;
   flex-shrink: 0;
   animation: pbBlink 1s ease-in-out infinite;
+}
+.playback-status.idle .pb-ico {
+  animation: none;
+  opacity: 0.55;
 }
 .pb-text {
   min-width: 0;
@@ -365,6 +378,23 @@ button:focus {
   overflow: auto;
   background: var(--bg);
   padding: 28px 32px 32px;
+}
+/* 侧栏留白处的剪影水印（位于导航与底部状态区之间，不与其重叠） */
+.sidebar-mark {
+  /* 绝对定位贴住底部区域，留出与播报区的一段距离；
+     上方与菜单之间的留白更大，位置固定不随播报状态移动 */
+  position: absolute;
+  left: 50%;
+  bottom: 168px;
+  transform: translateX(-50%);
+  width: 132px;
+  height: 132px;
+  background: var(--line-strong);
+  -webkit-mask: var(--watermark) center / contain no-repeat;
+  mask: var(--watermark) center / contain no-repeat;
+  opacity: 0.7;
+  pointer-events: none;
+  user-select: none;
 }
 .loading {
   padding: 60px 0;
@@ -586,13 +616,8 @@ button:focus {
   background: var(--surface-3);
 }
 .strategy-row.dragging {
-  opacity: 0.4;
-}
-.strategy-row.drag-over-before {
-  box-shadow: inset 0 2px 0 var(--ink);
-}
-.strategy-row.drag-over-after {
-  box-shadow: inset 0 -2px 0 var(--ink);
+  opacity: 0.35;
+  background: var(--surface-3);
 }
 .drag-cell {
   display: flex;
@@ -606,15 +631,47 @@ button:focus {
   height: 28px;
   border-radius: 4px;
   color: var(--muted-2);
-  cursor: grab;
+  /* 自绘 SVG 光标，避免系统手型光标在缩放时的锯齿 */
+  cursor: url('/cursor-grab.svg') 12 4, grab;
+  touch-action: none;
   opacity: 0.55;
   transition: opacity 0.12s;
 }
 .strategy-row:hover .drag-handle {
   opacity: 1;
 }
-.drag-handle:active {
-  cursor: grabbing;
+/* 拖动时跟随指针的浮层 */
+.drag-ghost {
+  position: fixed;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 10px 26px rgba(10, 10, 12, 0.18);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 550;
+  pointer-events: none;
+}
+.drag-ghost span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drag-ghost svg {
+  flex-shrink: 0;
+  color: var(--muted-2);
+}
+/* 拖动时全局变成握紧的手 */
+body.is-row-dragging,
+body.is-row-dragging * {
+  cursor: url('/cursor-grabbing.svg') 12 4, grabbing !important;
 }
 .strategy-name {
   font-size: 13px;
@@ -846,9 +903,13 @@ select.control {
 select.control:focus {
   border-color: var(--ink);
 }
+/* 播报记录：各列按比例分配，窗口最大化时也能铺满 */
 .history-row {
   display: grid;
-  grid-template-columns: 88px 104px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(84px, 1fr) minmax(96px, 1fr) minmax(0, 3fr) minmax(
+      120px,
+      1fr
+    );
   gap: 14px;
   align-items: center;
   width: 100%;
@@ -903,7 +964,9 @@ select.control:focus {
 .history-side {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 .history-side .chev {
   color: var(--muted-2);
@@ -963,7 +1026,7 @@ select.control:focus {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
   gap: 12px;
-  max-width: 1000px;
+  max-width: 100%;
 }
 .sound-card {
   background: var(--surface);
@@ -1129,7 +1192,7 @@ select.control:focus {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  max-width: 840px;
+  max-width: 100%;
 }
 .settings-card {
   background: var(--surface);
@@ -2202,9 +2265,13 @@ button.ringtone-item {
     justify-content: center;
     padding: 0;
   }
+  .sidebar-mark {
+    display: none;
+  }
   .sidebar-foot {
     display: flex;
     justify-content: center;
+    min-height: 0;
   }
   .conn {
     justify-content: center;

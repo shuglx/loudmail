@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
@@ -32,8 +32,9 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [draggingId, setDraggingId] = useState(null);
-  const [dropTarget, setDropTarget] = useState(null);
+  // 拖动排序：drag 保存被拖动的策略 id 与实时预览的顺序
+  const [drag, setDrag] = useState(null);
+  const dragRef = useRef(null);
   const [importTarget, setImportTarget] = useState(null);
 
   const enabledCount = strategies.filter((s) => s.enabled).length;
@@ -106,47 +107,82 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
     }
   };
 
-  const onDragStart = (event, strategy) => {
-    setDraggingId(strategy.id);
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', strategy.id);
-    const row = event.currentTarget.closest('.strategy-row');
-    if (row) event.dataTransfer.setDragImage(row, 24, 24);
+  // 用 pointer 事件自行实现拖拽：没有原生拖影与「禁止」光标
+  const startDrag = (event, strategy) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const baseIds = strategies.map((s) => s.id);
+    setDrag({
+      id: strategy.id,
+      name: strategy.name,
+      baseIds,
+      ids: baseIds,
+      x: event.clientX,
+      y: event.clientY,
+    });
   };
 
-  const onDragOver = (event, strategy) => {
-    if (!draggingId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    if (strategy.id === draggingId) {
-      setDropTarget(null);
-      return;
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
-    const after = event.clientY > rect.top + rect.height / 2;
-    setDropTarget({ id: strategy.id, after });
-  };
+  useEffect(() => {
+    dragRef.current = drag;
+  }, [drag]);
 
-  const onDrop = async (event, strategy) => {
-    event.preventDefault();
-    const after = dropTarget?.id === strategy.id ? dropTarget.after : false;
-    const from = strategies.findIndex((s) => s.id === draggingId);
-    setDraggingId(null);
-    setDropTarget(null);
-    if (from < 0 || strategy.id === draggingId) return;
-    const ids = strategies.map((s) => s.id);
-    const [moved] = ids.splice(from, 1);
-    const target = ids.indexOf(strategy.id);
-    if (target < 0) return;
-    ids.splice(target + (after ? 1 : 0), 0, moved);
-    try {
-      await api.reorderStrategies(ids);
-      await onRefresh();
-      flash('策略顺序已更新');
-    } catch (e) {
-      flash(String(e));
-    }
-  };
+  const dragging = Boolean(drag);
+
+  useEffect(() => {
+    if (!dragging) return undefined;
+    document.body.classList.add('is-row-dragging');
+
+    const onMove = (event) => {
+      setDrag((prev) => {
+        if (!prev) return prev;
+        const rest = prev.baseIds.filter((id) => id !== prev.id);
+        const rows = Array.from(document.querySelectorAll('.strategy-row')).filter(
+          (node) => node.dataset.id !== prev.id
+        );
+        let insertAt = rest.length;
+        for (let i = 0; i < rows.length; i += 1) {
+          const rect = rows[i].getBoundingClientRect();
+          if (event.clientY < rect.top + rect.height / 2) {
+            insertAt = Math.min(i, rest.length);
+            break;
+          }
+        }
+        const next = [...rest.slice(0, insertAt), prev.id, ...rest.slice(insertAt)];
+        const updated = { ...prev, ids: next, x: event.clientX, y: event.clientY };
+        // 同步给 ref，避免 pointerup 时读到上一帧的顺序
+        dragRef.current = updated;
+        return updated;
+      });
+    };
+
+    const finish = async () => {
+      const current = dragRef.current;
+      setDrag(null);
+      if (!current) return;
+      if (current.ids.join('|') === current.baseIds.join('|')) return;
+      try {
+        await api.reorderStrategies(current.ids);
+        await onRefresh();
+        flash('策略顺序已更新');
+      } catch (e) {
+        flash(String(e));
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    return () => {
+      document.body.classList.remove('is-row-dragging');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+  }, [dragging]);
+
+  const ordered = drag
+    ? drag.ids.map((id) => strategies.find((s) => s.id === id)).filter(Boolean)
+    : strategies;
 
   const exportStrategies = async () => {
     try {
@@ -171,9 +207,12 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
     setImportTarget(null);
     if (!target) return;
     try {
-      const count = await api.importStrategies(target.path);
+      const result = await api.importStrategies(target.path);
       await onRefresh();
-      flash(`已导入 ${count} 条策略`);
+      const parts = [`新增 ${result.added} 条`];
+      if (result.updated) parts.push(`覆盖 ${result.updated} 条`);
+      if (result.skipped) parts.push(`跳过 ${result.skipped} 条`);
+      flash(`导入完成：${parts.join('，')}`);
     } catch (e) {
       flash(String(e));
     }
@@ -228,34 +267,22 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
               </button>
             </div>
           ) : (
-            strategies.map((strategy) => {
+            ordered.map((strategy) => {
               const sound = sounds.find((s) => s.id === strategy.soundId);
               const mode = modeMeta(strategy.matchMode);
               return (
                 <div
                   key={strategy.id}
-                  className={`strategy-row strategy-grid ${
-                    draggingId === strategy.id ? 'dragging' : ''
-                  } ${
-                    dropTarget?.id === strategy.id
-                      ? dropTarget.after
-                        ? 'drag-over-after'
-                        : 'drag-over-before'
-                      : ''
+                  data-id={strategy.id}
+                  className={`strategy-row strategy-grid${
+                    drag?.id === strategy.id ? ' dragging' : ''
                   }`}
-                  onDragOver={(e) => onDragOver(e, strategy)}
-                  onDrop={(e) => onDrop(e, strategy)}
                 >
                   <div className="drag-cell">
                     <span
                       className="drag-handle"
-                      draggable
                       title="拖动排序"
-                      onDragStart={(e) => onDragStart(e, strategy)}
-                      onDragEnd={() => {
-                        setDraggingId(null);
-                        setDropTarget(null);
-                      }}
+                      onPointerDown={(e) => startDrag(e, strategy)}
                     >
                       <GripIcon />
                     </span>
@@ -305,6 +332,13 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           )}
         </div>
       </div>
+
+      {drag ? (
+        <div className="drag-ghost" style={{ top: drag.y + 14, left: drag.x + 16 }}>
+          <GripIcon />
+          <span>{drag.name}</span>
+        </div>
+      ) : null}
 
       <Modal
         open={modalOpen}
@@ -448,7 +482,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       <ConfirmDialog
         open={Boolean(importTarget)}
         title={`导入 ${importTarget?.count ?? 0} 条策略？`}
-        description="导入会替换当前全部策略，顺序与文件一致；本机不存在的语音会被置空，需要重新指定。"
+        description="同名策略会被覆盖（保留其列表位置），文件中不存在于本机的策略按文件顺序追加，本机其它策略保持不动；本机没有的语音会被置空。"
         confirmText="导入"
         onCancel={() => setImportTarget(null)}
         onConfirm={confirmImport}

@@ -7,7 +7,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::logfile;
 use crate::models::{
-    Strategy, StrategyExportFile, StrategyExportItem, StrategyImportPreview, StrategyInput,
+    Strategy, StrategyExportFile, StrategyExportItem, StrategyImportPreview, StrategyImportResult,
+    StrategyInput,
 };
 use crate::state::AppState;
 use crate::store;
@@ -167,11 +168,12 @@ pub async fn cmd_pick_strategies_file(app: AppHandle) -> Result<Option<StrategyI
     }))
 }
 
+/// 按策略名合并导入：同名覆盖，本地已有但文件里没有的保持不动，新名字追加到末尾
 #[tauri::command]
 pub fn cmd_import_strategies(
     state: State<'_, Arc<AppState>>,
     path: String,
-) -> Result<usize, String> {
+) -> Result<StrategyImportResult, String> {
     let file = read_export_file(Path::new(&path))?;
     let sound_ids: Vec<String> = state
         .sounds
@@ -181,12 +183,18 @@ pub fn cmd_import_strategies(
         .map(|s| s.id.clone())
         .collect();
 
-    let now = store::now_iso();
-    let mut imported: Vec<Strategy> = Vec::new();
+    let mut strategies = state.strategies.write().map_err(|e| e.to_string())?;
+    let mut result = StrategyImportResult {
+        added: 0,
+        updated: 0,
+        skipped: 0,
+    };
+
     for item in &file.items {
         let name = item.name.trim().to_string();
         let keyword = item.keyword.trim().to_string();
         if name.is_empty() || keyword.is_empty() {
+            result.skipped += 1;
             continue;
         }
         // 发件人格式不合法时按「任意发件人」处理
@@ -195,31 +203,66 @@ pub fn cmd_import_strategies(
             .sound_id
             .clone()
             .filter(|id| !id.is_empty() && sound_ids.contains(id));
-        imported.push(Strategy {
-            id: store::new_id("stg"),
-            name,
-            enabled: item.enabled,
-            sender,
-            keyword,
-            match_mode: normalize_match_mode(&item.match_mode),
-            filter_replies: item.filter_replies,
-            sound_id,
-            play_count: item.play_count.clamp(1, 3),
-            // 游标留空：下一轮扫描只做初始化，不会补播历史邮件
-            cursor_seq: None,
-            created_at: now.clone(),
-            updated_at: now.clone(),
-        });
+        let match_mode = normalize_match_mode(&item.match_mode);
+        let play_count = item.play_count.clamp(1, 3);
+        let name_key = name.to_lowercase();
+
+        let position = strategies
+            .iter()
+            .position(|s| s.name.trim().to_lowercase() == name_key);
+
+        match position {
+            Some(index) => {
+                let target = &mut strategies[index];
+                let cond_changed = target.sender != sender
+                    || target.keyword != keyword
+                    || target.match_mode != match_mode;
+                target.name = name;
+                target.enabled = item.enabled;
+                target.sender = sender;
+                target.keyword = keyword;
+                target.match_mode = match_mode;
+                target.filter_replies = item.filter_replies;
+                target.sound_id = sound_id;
+                target.play_count = play_count;
+                target.updated_at = store::now_iso();
+                if cond_changed {
+                    // 条件变了：下一轮只做游标初始化，避免补播历史邮件
+                    target.cursor_seq = None;
+                }
+                result.updated += 1;
+            }
+            None => {
+                let now = store::now_iso();
+                strategies.push(Strategy {
+                    id: store::new_id("stg"),
+                    name,
+                    enabled: item.enabled,
+                    sender,
+                    keyword,
+                    match_mode,
+                    filter_replies: item.filter_replies,
+                    sound_id,
+                    play_count,
+                    cursor_seq: None,
+                    created_at: now.clone(),
+                    updated_at: now,
+                });
+                result.added += 1;
+            }
+        }
     }
 
-    if imported.is_empty() {
+    if result.added == 0 && result.updated == 0 {
         return Err("文件里没有可用的策略".into());
     }
-    let count = imported.len();
-    *state.strategies.write().map_err(|e| e.to_string())? = imported;
+    drop(strategies);
     state.save_strategies()?;
-    logfile::info(format!("导入匹配策略 {count} 条 <- {path}"));
-    Ok(count)
+    logfile::info(format!(
+        "合并导入匹配策略：新增 {} 条、覆盖 {} 条、跳过 {} 条 <- {path}",
+        result.added, result.updated, result.skipped
+    ));
+    Ok(result)
 }
 
 #[tauri::command]

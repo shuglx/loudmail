@@ -1,6 +1,6 @@
 [package]
 name = "loudmail"
-version = "1.1.0"
+version = "1.2.0"
 license = "MIT"
 description = "邮件到达报警音提醒工具"
 authors = ["ryan"]

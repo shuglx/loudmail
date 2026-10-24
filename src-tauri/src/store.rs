@@ -166,6 +166,11 @@ pub fn load_strategies(paths: &AppPaths) -> Vec<Strategy> {
             item.sound_id = Some(new_id.to_string());
             migrated = true;
         }
+        // 非法或历史遗留的匹配方式统一归为模糊匹配
+        if !["contains", "prefix", "suffix"].contains(&item.match_mode.as_str()) {
+            item.match_mode = "contains".into();
+            migrated = true;
+        }
     }
     if migrated {
         let _ = save_strategies(paths, &items);

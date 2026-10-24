@@ -124,9 +124,7 @@ fn scan(
         let result = client
             .as_mut()
             .ok_or_else(|| "MCP 客户端未连接".to_string())
-            .and_then(|c| {
-                c.search(&strategy.keyword, &start_time, &end_time, 200)
-            });
+            .and_then(|c| c.search(&strategy.keyword, &start_time, &end_time, 200));
         match result {
             Ok(items) => process_strategy(state, strategy, items, skip_backlog),
             Err(e) => {
@@ -181,7 +179,7 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
     };
 
     let sender_expected = strategy.sender.trim().to_lowercase();
-    let keyword = strategy.keyword.to_lowercase();
+    let matcher = build_matcher(strategy);
     let mut candidates: Vec<MailItem> = items
         .iter()
         .filter(|mail| {
@@ -195,7 +193,7 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
             if strategy.filter_replies && is_reply_or_forward(&mail.subject) {
                 return false;
             }
-            mail.subject.to_lowercase().contains(&keyword)
+            matcher.is_match(&mail.subject)
         })
         .cloned()
         .collect();
@@ -276,6 +274,33 @@ fn set_cursor(state: &AppState, strategy_id: &str, seq: u64) {
     }
 }
 
+/// 标题匹配器：模糊（包含）/ 以此开头 / 以此结尾（均为忽略大小写、标题先 trim）
+enum Matcher {
+    Contains(String),
+    Prefix(String),
+    Suffix(String),
+}
+
+impl Matcher {
+    fn is_match(&self, subject: &str) -> bool {
+        let subject = subject.trim().to_lowercase();
+        match self {
+            Matcher::Contains(keyword) => subject.contains(keyword),
+            Matcher::Prefix(keyword) => subject.starts_with(keyword),
+            Matcher::Suffix(keyword) => subject.ends_with(keyword),
+        }
+    }
+}
+
+fn build_matcher(strategy: &Strategy) -> Matcher {
+    let keyword = strategy.keyword.trim().to_lowercase();
+    match strategy.match_mode.as_str() {
+        "prefix" => Matcher::Prefix(keyword),
+        "suffix" => Matcher::Suffix(keyword),
+        _ => Matcher::Contains(keyword),
+    }
+}
+
 /// 标题是否以「转发 / 回复 + 中英文冒号」开头（允许前导空白、冒号前空格）
 fn is_reply_or_forward(subject: &str) -> bool {
     let head = subject.trim_start();
@@ -292,7 +317,7 @@ fn is_reply_or_forward(subject: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_reply_or_forward;
+    use super::{is_reply_or_forward, Matcher};
 
     #[test]
     fn detects_reply_and_forward_prefixes() {
@@ -306,5 +331,23 @@ mod tests {
         assert!(!is_reply_or_forward("【转发】SOC_安全告警"));
         assert!(!is_reply_or_forward("Re: SOC_安全告警"));
         assert!(!is_reply_or_forward("【5级】SOC_安全告警"));
+    }
+
+    #[test]
+    fn matches_subject_by_mode() {
+        let keyword = "soc_安全告警";
+        let contains = Matcher::Contains(keyword.into());
+        assert!(contains.is_match("【5级】SOC_安全告警_HIPS"));
+        assert!(contains.is_match("  SOC_安全告警  "));
+        assert!(!contains.is_match("DB_ALERT_核心库连接数超过阈值"));
+
+        let prefix = Matcher::Prefix(keyword.into());
+        assert!(prefix.is_match("SOC_安全告警_HIPS"));
+        assert!(prefix.is_match("  SOC_安全告警  "));
+        assert!(!prefix.is_match("【5级】SOC_安全告警_HIPS"));
+
+        let suffix = Matcher::Suffix(keyword.into());
+        assert!(suffix.is_match("主机 SOC_安全告警  "));
+        assert!(!suffix.is_match("SOC_安全告警_HIPS"));
     }
 }

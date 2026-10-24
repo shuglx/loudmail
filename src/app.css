@@ -653,6 +653,22 @@ code.keyword {
   white-space: nowrap;
   vertical-align: middle;
 }
+/* 关键词前的匹配方式符号（放在 chip 外面） */
+.keyword-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.kw-sym {
+  flex-shrink: 0;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.keyword-cell code.keyword {
+  min-width: 0;
+}
 .strategy-row > div:nth-child(6) {
   display: flex;
   justify-content: center;
@@ -1518,8 +1534,20 @@ select.control:focus {
   gap: 8px;
   align-items: center;
 }
-.field-row select {
+.field-row select,
+.field-row input {
   flex: 1;
+  min-width: 0;
+}
+/* 紧凑分段控件：只占内容宽度，用于行内搭配输入框 */
+.segmented.compact {
+  width: auto;
+  flex-shrink: 0;
+}
+.segmented.compact button {
+  flex: none;
+  padding: 0 9px;
+  font-size: 11px;
 }
 .field-inline {
   display: flex;

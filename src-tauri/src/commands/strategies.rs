@@ -40,6 +40,13 @@ fn normalize_sender(raw: &str) -> Result<String, String> {
     }
 }
 
+fn normalize_match_mode(mode: &str) -> String {
+    match mode {
+        "prefix" | "suffix" => mode.to_string(),
+        _ => "contains".to_string(),
+    }
+}
+
 fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, String> {
     let name = input.name.trim().to_string();
     if name.is_empty() || name.chars().count() > 40 {
@@ -50,6 +57,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
         return Err("标题关键词必填，且不超过 100 字".into());
     }
     let sender = normalize_sender(&input.sender)?;
+    let match_mode = normalize_match_mode(&input.match_mode);
     let sound_id = input.sound_id.clone().filter(|s| !s.is_empty());
     if sound_id.is_none() {
         return Err("请选择报警音频".into());
@@ -61,6 +69,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
         name,
         sender,
         keyword,
+        match_mode,
         filter_replies: input.filter_replies,
         sound_id,
         play_count: input.play_count.clamp(1, 3),
@@ -77,6 +86,7 @@ fn build_export(state: &AppState) -> Result<StrategyExportFile, String> {
             name: item.name.clone(),
             sender: item.sender.clone(),
             keyword: item.keyword.clone(),
+            match_mode: item.match_mode.clone(),
             filter_replies: item.filter_replies,
             sound_id: item.sound_id.clone(),
             sound_name: item
@@ -191,6 +201,7 @@ pub fn cmd_import_strategies(
             enabled: item.enabled,
             sender,
             keyword,
+            match_mode: normalize_match_mode(&item.match_mode),
             filter_replies: item.filter_replies,
             sound_id,
             play_count: item.play_count.clamp(1, 3),
@@ -233,6 +244,7 @@ pub fn cmd_create_strategy(
         enabled: input.enabled,
         sender: input.sender,
         keyword: input.keyword,
+        match_mode: input.match_mode,
         filter_replies: input.filter_replies,
         sound_id: input.sound_id,
         play_count: input.play_count,
@@ -262,11 +274,14 @@ pub fn cmd_update_strategy(
         .find(|s| s.id == id)
         .ok_or_else(|| "策略不存在".to_string())?;
 
-    let cond_changed = item.sender != input.sender || item.keyword != input.keyword;
+    let cond_changed = item.sender != input.sender
+        || item.keyword != input.keyword
+        || item.match_mode != input.match_mode;
     item.name = input.name;
     item.enabled = input.enabled;
     item.sender = input.sender;
     item.keyword = input.keyword;
+    item.match_mode = input.match_mode;
     item.filter_replies = input.filter_replies;
     item.sound_id = input.sound_id;
     item.play_count = input.play_count;

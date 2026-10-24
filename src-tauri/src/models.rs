@@ -100,6 +100,11 @@ impl Default for AppConfig {
     }
 }
 
+/// 标题关键词匹配方式：contains（模糊）/ prefix（以此开头）/ suffix（以此结尾）
+fn default_match_mode() -> String {
+    "contains".into()
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Strategy {
@@ -108,6 +113,8 @@ pub struct Strategy {
     pub enabled: bool,
     pub sender: String,
     pub keyword: String,
+    #[serde(default = "default_match_mode")]
+    pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
     pub sound_id: Option<String>,
@@ -123,6 +130,8 @@ pub struct StrategyInput {
     pub name: String,
     pub sender: String,
     pub keyword: String,
+    #[serde(default = "default_match_mode")]
+    pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
     pub sound_id: Option<String>,
@@ -149,6 +158,8 @@ pub struct StrategyExportItem {
     #[serde(default)]
     pub sender: String,
     pub keyword: String,
+    #[serde(default = "default_match_mode")]
+    pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
     #[serde(default)]

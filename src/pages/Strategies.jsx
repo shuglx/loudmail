@@ -5,10 +5,20 @@ import Modal from '../components/Modal';
 import Switch from '../components/Switch';
 import { ExportIcon, GripIcon, ImportIcon, PlayIcon } from '../icons';
 
+const MATCH_MODES = [
+  { key: 'contains', label: '模糊匹配', symbol: '≈' },
+  { key: 'prefix', label: '以此开头', symbol: '^' },
+  { key: 'suffix', label: '以此结尾', symbol: '$' },
+];
+
+const modeMeta = (mode) =>
+  MATCH_MODES.find((item) => item.key === mode) || MATCH_MODES[0];
+
 const emptyForm = {
   name: '',
   sender: '',
   keyword: '',
+  matchMode: 'contains',
   filterReplies: true,
   soundId: '',
   playCount: 1,
@@ -41,6 +51,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       name: strategy.name,
       sender: strategy.sender,
       keyword: strategy.keyword,
+      matchMode: strategy.matchMode || 'contains',
       filterReplies: strategy.filterReplies !== false,
       soundId: strategy.soundId || '',
       playCount: strategy.playCount || 1,
@@ -219,6 +230,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           ) : (
             strategies.map((strategy) => {
               const sound = sounds.find((s) => s.id === strategy.soundId);
+              const mode = modeMeta(strategy.matchMode);
               return (
                 <div
                   key={strategy.id}
@@ -261,7 +273,13 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                     )}
                   </div>
                   <div>
-                    <code className="keyword">{strategy.keyword}</code>
+                    <span
+                      className="keyword-cell"
+                      title={`${mode.label}：${strategy.keyword}`}
+                    >
+                      <span className="kw-sym">{mode.symbol}</span>
+                      <code className="keyword">{strategy.keyword}</code>
+                    </span>
                   </div>
                   <div>
                     <span className={`sound-chip${sound ? '' : ' missing'}`}>
@@ -333,14 +351,30 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           <label>
             标题关键词 <span className="req">*</span>
           </label>
-          <input
-            type="text"
-            maxLength={100}
-            value={form.keyword}
-            placeholder="SOC_安全告警"
-            onChange={(e) => setForm({ ...form, keyword: e.target.value })}
-          />
-          <p className="hint">作为服务端检索关键词，同时会在本地再校验标题是否包含该关键词。</p>
+          <div className="field-row">
+            <input
+              type="text"
+              maxLength={100}
+              value={form.keyword}
+              placeholder="SOC_安全告警"
+              onChange={(e) => setForm({ ...form, keyword: e.target.value })}
+            />
+            <div className="segmented compact">
+              {MATCH_MODES.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={form.matchMode === item.key ? 'active' : ''}
+                  onClick={() => setForm({ ...form, matchMode: item.key })}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="hint">
+            服务端按关键词检索，本地再按所选方式校验标题（忽略大小写，标题首尾空格不计）。
+          </p>
         </div>
         <div className="field field-inline">
           <div className="label">

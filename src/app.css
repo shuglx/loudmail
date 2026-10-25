@@ -396,6 +396,17 @@ button:focus {
   pointer-events: none;
   user-select: none;
 }
+/* 暗色下直接展示原图（保留图标本身的颜色与阴影），不再压成灰色剪影 */
+:root[data-theme='dark'] .sidebar-mark {
+  -webkit-mask: none;
+  mask: none;
+  background-color: transparent;
+  background-image: var(--watermark);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.15;
+}
 .loading {
   padding: 60px 0;
   text-align: center;

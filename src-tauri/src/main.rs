@@ -138,6 +138,7 @@ fn main() {
             commands::sounds::cmd_save_recording,
             commands::sounds::cmd_rename_sound,
             commands::sounds::cmd_delete_sound,
+            commands::sounds::cmd_export_sound,
             commands::sounds::cmd_preview_sound,
             commands::sounds::cmd_stop_playback,
             commands::sounds::cmd_get_playback_status,

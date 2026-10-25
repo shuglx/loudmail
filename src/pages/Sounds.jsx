@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
-import { PlayIcon, SearchIcon, StopIcon, UploadIcon } from '../icons';
+import {
+  DownloadIcon,
+  PencilIcon,
+  PlayIcon,
+  SearchIcon,
+  StopIcon,
+  TrashIcon,
+  UploadIcon,
+} from '../icons';
 
 const sourceLabel = { builtin: '内置', upload: '上传', record: '录音', tts: 'TTS' };
 
@@ -39,6 +47,7 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
   const [previewing, setPreviewing] = useState('');
   const [ttsInfo, setTtsInfo] = useState(null);
   const [renameTarget, setRenameTarget] = useState(null);
+  const [exportingId, setExportingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [query, setQuery] = useState('');
@@ -308,6 +317,19 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
     }
   };
 
+  const downloadSound = async (sound) => {
+    if (exportingId) return;
+    setExportingId(sound.id);
+    try {
+      const path = await api.exportSound(sound.id);
+      if (path) flash(`已保存到 ${path}`);
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      setExportingId(null);
+    }
+  };
+
   const removeSound = async () => {
     const target = deleteTarget;
     setDeleteTarget(null);
@@ -396,21 +418,40 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                     <i />
                   </span>
                 ) : null}
-                {isBuiltin(sound) ? null : (
-                  <div className="sound-actions">
+                <div className="sound-actions">
+                  {isBuiltin(sound) ? null : (
                     <button
+                      className="icon"
+                      title="重命名"
+                      aria-label="重命名"
                       onClick={() => {
                         setRenameTarget(sound);
                         setRenameValue(sound.name);
                       }}
                     >
-                      重命名
+                      <PencilIcon size={12} />
                     </button>
-                    <button className="danger" onClick={() => setDeleteTarget(sound)}>
-                      删除
+                  )}
+                  {isBuiltin(sound) ? null : (
+                    <button
+                      className="icon danger"
+                      title="删除"
+                      aria-label="删除"
+                      onClick={() => setDeleteTarget(sound)}
+                    >
+                      <TrashIcon size={12} />
                     </button>
-                  </div>
-                )}
+                  )}
+                  <button
+                    className="icon accent"
+                    title="下载"
+                    aria-label="下载"
+                    disabled={exportingId === sound.id}
+                    onClick={() => downloadSound(sound)}
+                  >
+                    <DownloadIcon size={12} />
+                  </button>
+                </div>
               </div>
             </div>
           );

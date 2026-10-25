@@ -3,7 +3,14 @@ import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Switch from '../components/Switch';
-import { ExportIcon, GripIcon, ImportIcon, PlayIcon } from '../icons';
+import {
+  ExportIcon,
+  GripIcon,
+  ImportIcon,
+  PencilIcon,
+  PlayIcon,
+  TrashIcon,
+} from '../icons';
 
 const MATCH_MODES = [
   { key: 'contains', label: '模糊匹配', symbol: '≈' },
@@ -321,9 +328,21 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                     />
                   </div>
                   <div className="row-actions">
-                    <button onClick={() => openEdit(strategy)}>编辑</button>
-                    <button className="danger" onClick={() => setDeleteTarget(strategy)}>
-                      删除
+                    <button
+                      className="icon"
+                      title="编辑"
+                      aria-label="编辑"
+                      onClick={() => openEdit(strategy)}
+                    >
+                      <PencilIcon size={12} />
+                    </button>
+                    <button
+                      className="icon danger"
+                      title="删除"
+                      aria-label="删除"
+                      onClick={() => setDeleteTarget(strategy)}
+                    >
+                      <TrashIcon size={12} />
                     </button>
                   </div>
                 </div>

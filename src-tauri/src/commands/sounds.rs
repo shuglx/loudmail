@@ -225,6 +225,60 @@ pub fn cmd_delete_sound(state: State<'_, Arc<AppState>>, id: String) -> Result<(
     Ok(())
 }
 
+/// 语音名 → 文件名：替换 Windows 非法字符，去掉首尾空白与末尾句点
+fn safe_file_name(name: &str) -> String {
+    const ILLEGAL: [char; 9] = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if ILLEGAL.contains(&c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_end_matches('.').trim();
+    if trimmed.is_empty() {
+        "语音".into()
+    } else {
+        trimmed.chars().take(80).collect()
+    }
+}
+
+/// 导出语音：另存为以语音名命名的 WAV，返回保存路径（用户取消时返回 None）
+#[tauri::command]
+pub fn cmd_export_sound(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<Option<String>, String> {
+    let sound = state.sound(&id).ok_or_else(|| "语音不存在".to_string())?;
+    let source = state.paths.sounds_dir.join(&sound.file);
+    if !source.exists() {
+        return Err("语音文件不存在".into());
+    }
+    if let Some(window) = app.get_window("main") {
+        let _ = window.set_focus();
+    }
+    let default_name = format!("{}.wav", safe_file_name(&sound.name));
+    let Some(target) = FileDialogBuilder::new()
+        .set_title("保存语音")
+        .set_file_name(&default_name)
+        .add_filter("WAV 音频", &["wav"])
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    std::fs::copy(&source, &target).map_err(|e| format!("保存语音失败: {e}"))?;
+    logfile::info(format!(
+        "导出语音 {} -> {}",
+        source.display(),
+        target.display()
+    ));
+    Ok(Some(target.to_string_lossy().to_string()))
+}
+
 #[tauri::command]
 pub fn cmd_preview_sound(state: State<'_, Arc<AppState>>, id: String) -> Result<(), String> {
     let sound = state.sound(&id).ok_or_else(|| "语音不存在".to_string())?;

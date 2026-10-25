@@ -169,6 +169,21 @@ export const TrashIcon = ({ size = 13 }) => (
   </Svg>
 );
 
+export const DownloadIcon = ({ size = 13 }) => (
+  <Svg size={size}>
+    <path d="M12 4v10" />
+    <path d="M7.5 9.5L12 14l4.5-4.5" />
+    <path d="M5 19h14" />
+  </Svg>
+);
+
+export const PencilIcon = ({ size = 13 }) => (
+  <Svg size={size}>
+    <path d="M4 20l4-1L18.6 8.4a2 2 0 000-2.8l-.2-.2a2 2 0 00-2.8 0L5 16l-1 4z" />
+    <path d="M13.8 6.6l3.6 3.6" />
+  </Svg>
+);
+
 export const ChevronRightIcon = ({ size = 15 }) => (
   <Svg size={size}>
     <path d="M9 5l7 7-7 7" />

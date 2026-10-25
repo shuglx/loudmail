@@ -592,7 +592,7 @@ button:focus {
   grid-template-columns: 16px minmax(90px, 1.05fr) minmax(125px, 1.45fr) minmax(
       95px,
       1.15fr
-    ) minmax(95px, 0.95fr) 42px 100px;
+    ) minmax(95px, 0.95fr) 42px 62px;
   gap: 10px;
   min-width: 640px;
 }
@@ -753,7 +753,7 @@ code.keyword {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .row-actions button {
   height: 22px;
@@ -764,6 +764,13 @@ code.keyword {
   color: var(--muted);
   border-radius: 6px;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+/* 图标按钮：正方形并居中图标，节省操作列宽度 */
+.row-actions button.icon {
+  width: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
 }
 .row-actions button:hover {
   background: var(--hover);
@@ -1119,7 +1126,7 @@ select.control:focus {
 .sound-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -1132,6 +1139,13 @@ select.control:focus {
   color: var(--muted);
   border-radius: 6px;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+/* 图标按钮：正方形并居中图标，节省卡片底部空间 */
+.sound-actions button.icon {
+  width: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
 }
 .sound-actions button:hover {
   background: var(--hover);
@@ -1146,6 +1160,15 @@ select.control:focus {
   color: var(--red);
   background: var(--red-bg);
   border-color: #edb5b0;
+}
+.sound-actions button.accent {
+  color: #2f7ce0;
+  border-color: #cfe2fb;
+}
+.sound-actions button.accent:hover {
+  color: #1d6fe0;
+  background: #f2f8ff;
+  border-color: #bcd9fb;
 }
 .tag {
   display: inline-flex;
@@ -2368,6 +2391,15 @@ button.ringtone-item {
 }
 :root[data-theme='dark'] .sound-actions button.danger:hover {
   border-color: rgba(255, 123, 114, 0.6);
+}
+:root[data-theme='dark'] .sound-actions button.accent {
+  color: #7fb4ff;
+  border-color: rgba(127, 180, 255, 0.38);
+}
+:root[data-theme='dark'] .sound-actions button.accent:hover {
+  color: #9cc7ff;
+  background: rgba(127, 180, 255, 0.12);
+  border-color: rgba(127, 180, 255, 0.6);
 }
 :root[data-theme='dark'] .row-actions button:hover {
   border-color: #4a505a;

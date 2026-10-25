@@ -23,6 +23,7 @@ export const api = {
     invoke('cmd_save_recording', { tempPath, name, durationMs }),
   renameSound: (id, name) => invoke('cmd_rename_sound', { id, name }),
   deleteSound: (id) => invoke('cmd_delete_sound', { id }),
+  exportSound: (id) => invoke('cmd_export_sound', { id }),
   previewSound: (id) => invoke('cmd_preview_sound', { id }),
   previewTemp: (path) => invoke('cmd_preview_temp', { path }),
   ttsGenerate: (text) => invoke('cmd_tts_generate', { text }),

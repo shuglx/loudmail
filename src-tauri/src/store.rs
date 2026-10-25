@@ -279,6 +279,29 @@ pub fn load_sounds(paths: &AppPaths) -> Vec<SoundItem> {
         }
     }
 
+    // 排序：内置语音永远排在用户新增的语音之前；内置之间按 alert-sound 目录顺序
+    let builtin_order: Vec<&str> = defs.iter().map(|def| def.id.as_str()).collect();
+    let rank = |item: &SoundItem| -> (bool, usize) {
+        if item.source != "builtin" {
+            return (true, usize::MAX);
+        }
+        let position = builtin_order
+            .iter()
+            .position(|id| *id == item.id)
+            .unwrap_or(usize::MAX);
+        (false, position)
+    };
+    let before: Vec<String> = file.items.iter().map(|item| item.id.clone()).collect();
+    file.items.sort_by_key(rank);
+    if file
+        .items
+        .iter()
+        .map(|item| item.id.as_str())
+        .ne(before.iter().map(|id| id.as_str()))
+    {
+        changed = true;
+    }
+
     if changed {
         let _ = save_sounds(paths, &file.items);
     }

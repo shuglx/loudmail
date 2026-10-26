@@ -14,14 +14,27 @@ const MENU_MAX_HEIGHT = 260;
  * 而且弹层会跑到应用窗口外面去（定位按屏幕而不是按控件算）。这里用一个按钮 +
  * position: fixed 的菜单自己实现，位置由 getBoundingClientRect 现算。
  */
-export default function Select({ value, options, onChange, className = '' }) {
+export default function Select({
+  value,
+  options,
+  onChange,
+  className = '',
+  searchable = false,
+}) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef(null);
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   // 配置里的数值有时是字符串，按字符串比较避免选不中
   const same = (a, b) => String(a) === String(b);
   const current = options.find((option) => same(option.value, value));
+  const keyword = query.trim().toLowerCase();
+  const shown =
+    searchable && keyword
+      ? options.filter((option) => String(option.label).toLowerCase().includes(keyword))
+      : options;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -51,8 +64,13 @@ export default function Select({ value, options, onChange, className = '' }) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open && searchable) inputRef.current?.focus();
+  }, [open, searchable]);
+
   const toggle = () => {
     if (open) {
+      setQuery('');
       setOpen(false);
       return;
     }
@@ -90,13 +108,28 @@ export default function Select({ value, options, onChange, className = '' }) {
               className="select-menu"
               style={{ top: pos.top, left: pos.left, width: pos.width }}
             >
-              {options.map((option) => (
+              {searchable ? (
+                <input
+                  ref={inputRef}
+                  className="select-search"
+                  type="text"
+                  value={query}
+                  placeholder="输入名称过滤"
+                  spellCheck={false}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              ) : null}
+              {shown.length === 0 ? (
+                <div className="select-empty">无匹配项</div>
+              ) : null}
+              {shown.map((option) => (
                 <button
                   key={String(option.value)}
                   type="button"
                   className={`select-item${same(option.value, value) ? ' on' : ''}`}
                   onClick={() => {
                     onChange(option.value);
+                    setQuery('');
                     setOpen(false);
                   }}
                 >

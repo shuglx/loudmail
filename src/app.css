@@ -1066,6 +1066,26 @@ code.keyword {
 .select.open > svg {
   color: var(--text);
 }
+.select-search {
+  width: 100%;
+  height: 28px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.select-search:focus {
+  border-color: var(--ink);
+}
+.select-empty {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
 .select-menu {
   position: fixed;
   z-index: 80;
@@ -1872,6 +1892,10 @@ code.keyword {
 .field-row input {
   flex: 1;
   min-width: 0;
+}
+/* 表单行里的下拉要撑满可用宽度（.select 默认有 max-width，会截断） */
+.field-row .select {
+  max-width: none;
 }
 /* 紧凑分段控件：只占内容宽度，用于行内搭配输入框 */
 .segmented.compact {
@@ -2709,7 +2733,27 @@ button.ringtone-item {
 ::root[data-theme='dark'] .select:hover {
   border-color: #4a505a;
 }
-::root[data-theme='dark'] .select-menu {
+::root[data-theme='dark'] .select-search {
+  width: 100%;
+  height: 28px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.select-search:focus {
+  border-color: var(--ink);
+}
+.select-empty {
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.select-menu {
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
 }
 

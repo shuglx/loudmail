@@ -449,6 +449,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           <div className="field-row">
             <Select
               value={form.soundId}
+              searchable
               options={
                 sounds.length === 0
                   ? [{ value: '', label: '请先在语音库添加语音' }]

@@ -83,12 +83,18 @@ fn main() {
             app.manage(state.clone());
             scheduler::start(state.clone());
 
-            // 三端统一：左键（单击/双击）呼出主界面，右键才弹菜单。
-            // macOS 默认是左键弹菜单，Windows 默认也是，这里统一关掉。
-            SystemTray::new()
-                .with_menu(tray_menu)
-                .with_menu_on_left_click(false)
-                .build(app)?;
+            // 托盘左键呼出主界面、右键弹菜单。
+            // 注意：with_menu_on_left_click 只有 macOS 版本才有（tauri 里带
+            // #[cfg(target_os = "macos")]），Windows/Linux 调用会编译失败。
+            // Windows 左键本来就走 LeftClick 事件、右键弹菜单，无需干预；
+            // Linux 由 libappindicator 决定，无法通过 API 控制。
+            #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+            let mut tray = SystemTray::new().with_menu(tray_menu);
+            #[cfg(target_os = "macos")]
+            {
+                tray = tray.with_menu_on_left_click(false);
+            }
+            tray.build(app)?;
 
             if !std::env::args().any(|arg| arg == "--hidden") {
                 show_main(&app.handle());

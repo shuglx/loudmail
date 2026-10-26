@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State};
 
+use chrono::{Duration as ChronoDuration, Local};
+
 use crate::logfile;
 use crate::mcp;
 use crate::models::*;
@@ -37,10 +39,19 @@ pub fn cmd_set_config(
     if !["light", "dark"].contains(&config.theme.as_str()) {
         return Err("主题仅支持 light / dark".into());
     }
-    config.tts.model_dir = config.tts.model_dir.trim().to_string();
+    config.tts.intranet_url = config.tts.intranet_url.trim().to_string();
+    config.tts.intranet_key = config.tts.intranet_key.trim().to_string();
+    config.tts.intranet_instructions = config.tts.intranet_instructions.trim().to_string();
+    if config.tts.intranet_voice != "ryan" {
+        config.tts.intranet_voice = "vivian".into();
+    }
     config.tts.speed = config.tts.speed.clamp(0.5, 2.0);
-    if !["local", "edge"].contains(&config.tts.provider.as_str()) {
-        return Err("语音来源仅支持 local / edge".into());
+    // 本地模型已下线：老配置里的 local 统一迁移到联网服务
+    if config.tts.provider == "local" {
+        config.tts.provider = "edge".into();
+    }
+    if !["edge", "intranet"].contains(&config.tts.provider.as_str()) {
+        return Err("语音来源仅支持 edge / intranet".into());
     }
     config.tts.edge_voice = config.tts.edge_voice.trim().to_string();
     if config.tts.edge_voice.is_empty() {
@@ -69,6 +80,32 @@ pub fn cmd_test_connection(
         .map(|c| c.behavior.mock)
         .unwrap_or(false);
     mcp::test_connection(&host, port, mock)
+}
+
+/// 调试用：用 MCP 接口查一次邮件（limit 3），返回收发报文
+#[tauri::command]
+pub fn cmd_test_search(
+    state: State<'_, Arc<AppState>>,
+    keyword: String,
+    limit: u32,
+) -> DebugSearchResult {
+    let (host, port, lookback_min, mock) = match state.config.read() {
+        Ok(config) => (
+            config.mcp.host.clone(),
+            config.mcp.port,
+            config.scan.lookback_min,
+            config.behavior.mock,
+        ),
+        Err(_) => ("127.0.0.1".to_string(), 11328, 30, false),
+    };
+    let end = Local::now();
+    let start = end - ChronoDuration::minutes(lookback_min as i64);
+    let start_time = start.format("%Y%m%d%H%M%S").to_string();
+    let end_time = end.format("%Y%m%d%H%M%S").to_string();
+    logfile::info(format!(
+        "[测试接口] keyword={keyword} limit={limit} window={start_time}~{end_time}"
+    ));
+    mcp::search_debug(&host, port, &keyword, &start_time, &end_time, limit, mock)
 }
 
 #[tauri::command]
@@ -122,45 +159,52 @@ pub fn cmd_open_path(path: String) -> Result<(), String> {
     open::that(target).map_err(|e| format!("打开失败: {e}"))
 }
 
-#[tauri::command]
-pub async fn cmd_pick_tts_model_dir(app: AppHandle) -> Result<Option<String>, String> {
-    if let Some(window) = app.get_window("main") {
-        let _ = window.set_focus();
-    }
-    Ok(tauri::api::dialog::blocking::FileDialogBuilder::new()
-        .pick_folder()
-        .map(|path| path.to_string_lossy().to_string()))
-}
 
 #[tauri::command]
-pub fn cmd_tts_status(state: State<'_, Arc<AppState>>) -> TtsStatus {
+pub async fn cmd_tts_status(state: State<'_, Arc<AppState>>) -> Result<TtsStatus, String> {
     let config = state
         .config
         .read()
         .map(|c| c.tts.clone())
         .unwrap_or_default();
     if !config.enabled {
-        return TtsStatus {
+        return Ok(TtsStatus {
             ready: false,
             message: "TTS 未启用，请先开启".into(),
-        };
+        });
     }
-    if config.provider == "edge" {
-        return TtsStatus {
-            ready: true,
-            message: "在线 Edge 语音，需联网".into(),
-        };
-    }
-    match crate::audio::tts::resolve_model(&config.model_dir) {
-        Ok(_) => TtsStatus {
-            ready: true,
-            message: "模型已就绪".into(),
-        },
-        Err(e) => TtsStatus {
-            ready: false,
-            message: e,
-        },
-    }
+
+    // 真实探测：内网走 WS 握手，联网只探 TCP 443
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        if config.provider == "intranet" {
+            match crate::audio::tts::probe_intranet(&config.intranet_url, &config.intranet_key) {
+                Ok(_) => TtsStatus {
+                    ready: true,
+                    message: format!("内网服务可达 · 音色 {}", config.intranet_voice),
+                },
+                Err(e) => TtsStatus {
+                    ready: false,
+                    message: e,
+                },
+            }
+        } else {
+            match crate::audio::tts::probe_edge() {
+                Ok(_) => TtsStatus {
+                    ready: true,
+                    message: "联网服务可达（微软 Edge）".into(),
+                },
+                Err(e) => TtsStatus {
+                    ready: false,
+                    message: e,
+                },
+            }
+        }
+    })
+    .await;
+    Ok(result.unwrap_or(TtsStatus {
+        ready: false,
+        message: "检测失败".into(),
+    }))
 }
 
 #[tauri::command]

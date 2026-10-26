@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
+use base64::Engine as _;
 use edge_tts_rust::{EdgeTtsClient, SpeakOptions};
-use sherpa_onnx::{
-    GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsModelConfig,
-    OfflineTtsVitsModelConfig,
-};
+use serde_json::{json, Value};
+use tungstenite::client::IntoClientRequest;
+use tungstenite::{Message, WebSocket};
 
 use crate::logfile;
 
@@ -47,226 +48,171 @@ pub async fn synthesize_edge(text: &str, voice: &str) -> Result<(Vec<f32>, u32),
     Err(last_error)
 }
 
-/// 外置 TTS 模型的组成：.onnx 与 tokens.txt 必需，
-/// espeak-ng-data（piper 系）与 lexicon.txt（MeloTTS 等）按模型二选一。
-pub struct TtsModel {
-    pub onnx: PathBuf,
-    pub tokens: PathBuf,
-    pub lexicon: Option<PathBuf>,
-    pub data_dir: Option<PathBuf>,
-    /// 目录里可选的中文文本规范化规则（MeloTTS 提供 number.fst / date.fst）
-    pub rule_fsts: Option<String>,
+/// 内网 TTS（vLLM-Omni Speech API / Qwen3-TTS）的连接参数
+pub struct IntranetOptions<'a> {
+    pub url: &'a str,
+    pub key: &'a str,
+    pub voice: &'a str,
+    pub instructions: &'a str,
+    pub speed: f32,
 }
 
-/// 校验模型目录：取目录中的 .onnx，并要求 tokens.txt 与至少一个文本前端资源
-pub fn resolve_model(model_dir: &str) -> Result<TtsModel, String> {
-    let dir = Path::new(model_dir.trim());
-    if model_dir.trim().is_empty() {
-        return Err("未选择 TTS 模型目录".into());
-    }
-    if !dir.is_dir() {
-        return Err("TTS 模型目录不存在".into());
-    }
-    // 取体积最大的 .onnx：目录里可能混有 int8 版本或 Git LFS 指针文件（几百字节）
-    let onnx = std::fs::read_dir(dir)
-        .map_err(|e| format!("读取模型目录失败: {e}"))?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|candidate| {
-            candidate
-                .extension()
-                .map(|ext| ext.eq_ignore_ascii_case("onnx"))
-                .unwrap_or(false)
-        })
-        .max_by_key(|candidate| std::fs::metadata(candidate).map(|m| m.len()).unwrap_or(0))
-        .ok_or_else(|| "模型目录中未找到 .onnx 模型文件".to_string())?;
+const INTRANET_MODEL: &str = "Qwen3-TTS-12Hz-1.7B-CustomVoice";
+const DEFAULT_SAMPLE_RATE: u32 = 24_000;
 
-    let tokens = dir.join("tokens.txt");
-    if !tokens.is_file() {
-        return Err("模型目录缺少 tokens.txt".into());
+/// 建立到内网 TTS 的 WebSocket 连接（地址解析 + 可选 Bearer 认证 + 超时）
+fn connect_intranet(url: &str, key: &str) -> Result<WebSocket<TcpStream>, String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("未配置内网 TTS 服务地址".into());
     }
-    let lexicon = dir.join("lexicon.txt");
-    let lexicon = lexicon.is_file().then_some(lexicon);
-    let data_dir = dir.join("espeak-ng-data");
-    let data_dir = data_dir.is_dir().then_some(data_dir);
-    if lexicon.is_none() && data_dir.is_none() {
-        return Err("模型目录缺少 espeak-ng-data 或 lexicon.txt".into());
+    if url.starts_with("wss://") {
+        return Err("内网 TTS 暂不支持 wss://，请填 ws:// 地址".into());
     }
-    let rule_fsts: Vec<String> = ["number.fst", "date.fst"]
-        .iter()
-        .map(|name| dir.join(name))
-        .filter(|path| path.is_file())
-        .map(|path| path.to_string_lossy().into_owned())
+
+    let mut request = url
+        .into_client_request()
+        .map_err(|e| format!("内网 TTS 地址无效: {e}"))?;
+    let key = key.trim();
+    if !key.is_empty() {
+        request.headers_mut().insert(
+            "Authorization",
+            format!("Bearer {key}")
+                .parse()
+                .map_err(|_| "内网 TTS 认证信息非法".to_string())?,
+        );
+    }
+
+    let host = request.uri().host().unwrap_or("").to_string();
+    if host.is_empty() {
+        return Err("内网 TTS 地址缺少主机名".into());
+    }
+    let port = request.uri().port_u16().unwrap_or(80);
+    let addr = (host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|e| format!("内网 TTS 地址解析失败: {e}"))?
+        .next()
+        .ok_or_else(|| "内网 TTS 地址解析为空".to_string())?;
+    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5))
+        .map_err(|e| format!("连接内网 TTS 失败: {e}"))?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+    let (socket, _) = tungstenite::client(request, stream)
+        .map_err(|e| format!("内网 TTS 握手失败: {e}"))?;
+    Ok(socket)
+}
+
+/// 「检测」用：真的连一次内网 TTS，WS 握手成功即认为服务可达。
+pub fn probe_intranet(url: &str, key: &str) -> Result<(), String> {
+    let mut socket = connect_intranet(url, key)?;
+    let _ = socket.close(None);
+    Ok(())
+}
+
+/// 「检测」用：联网服务（微软 Edge）只做 TCP 可达性探测。
+pub fn probe_edge() -> Result<(), String> {
+    let addr = ("speech.platform.bing.com", 443)
+        .to_socket_addrs()
+        .map_err(|e| format!("解析在线语音地址失败: {e}"))?
+        .next()
+        .ok_or_else(|| "在线语音地址解析为空".to_string())?;
+    TcpStream::connect_timeout(&addr, Duration::from_secs(5))
+        .map(|_| ())
+        .map_err(|e| format!("连接在线语音服务失败: {e}"))
+}
+
+/// 内网合成：连 WebSocket，按 session.config → input.text → input.done 发三帧，
+/// 收集二进制 PCM（加 audio.chunk 的 base64 帧），收到 session.done 结束。
+pub fn synthesize_intranet(opt: &IntranetOptions<'_>, text: &str) -> Result<(Vec<f32>, u32), String> {
+    let url = opt.url.trim();
+    if url.is_empty() {
+        return Err("未配置内网 TTS 服务地址".into());
+    }
+    if url.starts_with("wss://") {
+        return Err("内网 TTS 暂不支持 wss://，请填 ws:// 地址".into());
+    }
+
+    let mut socket = connect_intranet(url, opt.key)?;
+
+    let voice = if opt.voice.trim().is_empty() {
+        "vivian"
+    } else {
+        opt.voice.trim()
+    };
+    let config = json!({
+        "type": "session.config",
+        "voice": voice,
+        "language": "Chinese",
+        "task_type": "CustomVoice",
+        "response_format": "pcm",
+        "stream_audio": true,
+        "split_granularity": "sentence",
+        "speed": opt.speed,
+        "model": INTRANET_MODEL,
+        "instructions": opt.instructions,
+    });
+    for frame in [
+        config,
+        json!({ "type": "input.text", "text": text }),
+        json!({ "type": "input.done" }),
+    ] {
+        socket
+            .send(Message::Text(frame.to_string()))
+            .map_err(|e| format!("内网 TTS 发送失败: {e}"))?;
+    }
+
+    let mut pcm: Vec<u8> = Vec::new();
+    let mut sample_rate = DEFAULT_SAMPLE_RATE;
+    loop {
+        match socket.read() {
+            Ok(Message::Binary(data)) => pcm.extend_from_slice(&data),
+            Ok(Message::Text(text)) => {
+                let Ok(msg) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
+                if let Some(rate) = msg.get("sample_rate").and_then(Value::as_u64) {
+                    if rate > 0 {
+                        sample_rate = rate as u32;
+                    }
+                }
+                match msg.get("type").and_then(Value::as_str) {
+                    Some("error") => {
+                        let message = msg
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("未知错误");
+                        return Err(format!("内网 TTS 返回错误: {message}"));
+                    }
+                    Some("audio.chunk") => {
+                        if let Some(data) = msg.get("audio_b64").and_then(Value::as_str) {
+                            let bytes = base64::engine::general_purpose::STANDARD
+                                .decode(data)
+                                .map_err(|e| format!("内网 TTS 音频解码失败: {e}"))?;
+                            pcm.extend_from_slice(&bytes);
+                        }
+                    }
+                    Some("session.done") => break,
+                    _ => {}
+                }
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(_) => {}
+            Err(e) => return Err(format!("内网 TTS 读取失败: {e}")),
+        }
+    }
+
+    if pcm.is_empty() {
+        return Err("内网 TTS 未返回音频数据（检查服务地址与音色）".into());
+    }
+    let samples: Vec<f32> = pcm
+        .chunks_exact(2)
+        .map(|pair| i16::from_le_bytes([pair[0], pair[1]]) as f32 / 32768.0)
         .collect();
-    Ok(TtsModel {
-        onnx,
-        tokens,
-        lexicon,
-        data_dir,
-        rule_fsts: (!rule_fsts.is_empty()).then(|| rule_fsts.join(",")),
-    })
-}
-
-/// 合成文本，返回 (采样, 采样率)
-pub fn synthesize(model_dir: &str, text: &str, speed: f32) -> Result<(Vec<f32>, u32), String> {
-    let model = resolve_model(model_dir)?;
-    let config = OfflineTtsConfig {
-        model: OfflineTtsModelConfig {
-            vits: OfflineTtsVitsModelConfig {
-                model: Some(model.onnx.to_string_lossy().into_owned()),
-                tokens: Some(model.tokens.to_string_lossy().into_owned()),
-                lexicon: model
-                    .lexicon
-                    .as_ref()
-                    .map(|path| path.to_string_lossy().into_owned()),
-                data_dir: model
-                    .data_dir
-                    .as_ref()
-                    .map(|path| path.to_string_lossy().into_owned()),
-                ..Default::default()
-            },
-            num_threads: 2,
-            ..Default::default()
-        },
-        rule_fsts: model.rule_fsts,
-        ..Default::default()
-    };
-    let tts = OfflineTts::create(&config).ok_or_else(|| "加载 TTS 模型失败".to_string())?;
-    let sample_rate = tts.sample_rate().max(1) as u32;
-
-    let clean = preprocess(text);
-    let mut speech: Vec<f32> = Vec::new();
-    for (is_acronym, seg) in segment(&clean) {
-        if is_acronym {
-            // 逐字母朗读：略放慢并留出明显间隔，避免字母之间连读
-            for ch in seg.chars() {
-                speech.extend(trim(
-                    &synth(&tts, &letter_zh(ch), speed * LETTER_SPEED_RATIO),
-                    sample_rate,
-                ));
-                speech.extend(silence(sample_rate, LETTER_GAP_SEC));
-            }
-            speech.extend(silence(sample_rate, 0.12));
-        } else if !seg.trim().is_empty() {
-            speech.extend(synth(&tts, seg.trim(), speed));
-            speech.extend(silence(sample_rate, 0.08));
-        }
-    }
-    if speech.iter().all(|s| *s == 0.0) {
-        return Err("TTS 未生成有效音频".into());
-    }
-    Ok((speech, sample_rate))
-}
-
-const LETTER_ZH: &[(char, &str)] = &[
-    ('A', "诶"), ('B', "必"), ('C', "西"), ('D', "迪"), ('E', "伊"), ('F', "艾弗"),
-    ('G', "吉"), ('H', "艾尺"), ('I', "爱"), ('J', "杰"), ('K', "开"), ('L', "艾勒"),
-    ('M', "艾姆"), ('N', "恩"), ('O', "欧"), ('P', "批"), ('Q', "扣"), ('R', "啊"),
-    ('S', "艾斯"), ('T', "提"), ('U', "优"), ('V', "维"), ('W', "达不溜"), ('X', "艾克斯"),
-    ('Y', "歪"), ('Z', "贼"),
-];
-
-/// 逐字母朗读时的语速系数（越小越慢、越清晰）
-const LETTER_SPEED_RATIO: f32 = 0.85;
-/// 相邻字母之间的静音时长
-const LETTER_GAP_SEC: f32 = 0.20;
-
-fn letter_zh(c: char) -> String {
-    LETTER_ZH
-        .iter()
-        .find(|(key, _)| *key == c.to_ascii_uppercase())
-        .map(|(_, value)| value.to_string())
-        .unwrap_or_else(|| c.to_string())
-}
-
-/// 把英文串整体拆成逐字母片段，其余保持原文
-fn segment(text: &str) -> Vec<(bool, String)> {
-    let mut out = Vec::new();
-    let mut last = 0usize;
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let mut i = 0usize;
-
-    while i < chars.len() {
-        let (start, c) = chars[i];
-        if c.is_ascii_alphabetic() {
-            let mut j = i;
-            while j < chars.len() && chars[j].1.is_ascii_alphabetic() {
-                j += 1;
-            }
-            let end = if j < chars.len() { chars[j].0 } else { text.len() };
-            if start > last {
-                out.push((false, text[last..start].to_string()));
-            }
-            out.push((true, text[start..end].to_string()));
-            last = end;
-            i = j;
-        } else {
-            i += 1;
-        }
-    }
-    if last < text.len() {
-        out.push((false, text[last..].to_string()));
-    }
-    out
-}
-
-/// 百分号、温度、符号等中文化
-fn preprocess(text: &str) -> String {
-    let replaced = text.replace('℃', "摄氏度").replace('&', "和").replace('@', "艾特");
-    let chars: Vec<char> = replaced.chars().collect();
-    let mut out = String::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] == '%' {
-            let mut k = out.len();
-            while k > 0 && (out.as_bytes()[k - 1].is_ascii_digit() || out.as_bytes()[k - 1] == b'.') {
-                k -= 1;
-            }
-            let number = out[k..].to_string();
-            out.truncate(k);
-            out.push_str("百分之");
-            out.push_str(&number);
-        } else {
-            out.push(chars[i]);
-        }
-        i += 1;
-    }
-    out
-}
-
-fn synth(tts: &OfflineTts, text: &str, speed: f32) -> Vec<f32> {
-    let config = GenerationConfig {
-        speed,
-        sid: 0,
-        ..Default::default()
-    };
-    tts.generate_with_config(text, &config, None::<fn(&[f32], f32) -> bool>)
-        .map(|audio| audio.samples().to_vec())
-        .unwrap_or_default()
-}
-
-fn trim(samples: &[f32], sample_rate: u32) -> Vec<f32> {
-    let peak = samples.iter().fold(0.0f32, |max, value| max.max(value.abs()));
-    if peak <= 0.0 {
-        return samples.to_vec();
-    }
-    let threshold = peak * 0.02;
-    let mut start = 0usize;
-    let mut end = samples.len();
-    while start < end && samples[start].abs() < threshold {
-        start += 1;
-    }
-    while end > start && samples[end - 1].abs() < threshold {
-        end -= 1;
-    }
-    let pad = (sample_rate as f32 * 0.012) as usize;
-    let start = start.saturating_sub(pad);
-    let end = (end + pad).min(samples.len());
-    samples[start..end].to_vec()
-}
-
-fn silence(sample_rate: u32, seconds: f32) -> Vec<f32> {
-    vec![0.0; (sample_rate as f32 * seconds) as usize]
+    logfile::info(format!(
+        "内网 TTS 合成完成: {} 采样点, {} Hz, voice={voice}",
+        samples.len(),
+        sample_rate
+    ));
+    Ok((samples, sample_rate))
 }
 
 #[cfg(test)]
@@ -274,18 +220,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn splits_every_english_run_for_letter_by_letter() {
-        let segments = segment("收到一条SOC系统的报警，Windows 正常");
-        assert!(segments
-            .iter()
-            .any(|(spell, value)| *spell && value == "SOC"));
-        assert!(segments
-            .iter()
-            .any(|(spell, value)| *spell && value == "Windows"));
+    fn pcm_i16_le_converts_to_float() {
+        let mut pcm = Vec::new();
+        pcm.extend_from_slice(&0i16.to_le_bytes());
+        pcm.extend_from_slice(&16384i16.to_le_bytes());
+        pcm.extend_from_slice(&(-32768i16).to_le_bytes());
+        let samples: Vec<f32> = pcm
+            .chunks_exact(2)
+            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]) as f32 / 32768.0)
+            .collect();
+        assert_eq!(samples, vec![0.0, 0.5, -1.0]);
     }
 
     #[test]
-    fn preprocess_percent() {
-        assert_eq!(preprocess("温度 95%"), "温度 百分之95");
+    fn rejects_wss_and_empty_url() {
+        let opt = IntranetOptions {
+            url: "",
+            key: "",
+            voice: "vivian",
+            instructions: "",
+            speed: 1.0,
+        };
+        assert!(synthesize_intranet(&opt, "测试").is_err());
+        let opt = IntranetOptions { url: "wss://x/y", ..opt };
+        assert!(synthesize_intranet(&opt, "测试").is_err());
     }
 }

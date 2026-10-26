@@ -8,7 +8,10 @@ use reqwest::blocking::Client;
 use serde_json::{json, Value};
 
 use crate::logfile;
-use crate::models::{HandshakeResult, MailItem, ServerInfo, StepResult, TestConnectionResult};
+use crate::mcp::mock;
+use crate::models::{
+    DebugSearchResult, HandshakeResult, MailItem, ServerInfo, StepResult, TestConnectionResult,
+};
 
 enum SseEvent {
     Endpoint(String),
@@ -115,6 +118,29 @@ impl CoremailClient {
         Ok(mails)
     }
 
+    /// 调试用：发一次 mail_search，返回（发送报文, 返回报文）
+    pub fn search_debug(
+        &mut self,
+        pattern: &str,
+        start_time: &str,
+        end_time: &str,
+        limit: u32,
+    ) -> Result<(String, String), String> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let params = mail_search_params(pattern, start_time, end_time, limit);
+        let request = serde_json::to_string_pretty(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": params
+        }))
+        .unwrap_or_default();
+        let envelope = self.call_envelope(id, "tools/call", params)?;
+        let response = serde_json::to_string_pretty(&envelope).unwrap_or_default();
+        Ok((request, response))
+    }
+
     fn initialize(&mut self) -> Result<(), String> {
         let params = json!({
             "protocolVersion": "2024-11-05",
@@ -156,6 +182,15 @@ impl CoremailClient {
     }
 
     fn call(&mut self, id: u64, method: &str, params: Value) -> Result<Value, String> {
+        let envelope = self.call_envelope(id, method, params)?;
+        if let Some(err) = envelope.get("error") {
+            return Err(format!("MCP 返回错误: {err}"));
+        }
+        Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    /// 返回完整的 JSON-RPC 报文（含 id/result/error），供调试展示用
+    fn call_envelope(&mut self, id: u64, method: &str, params: Value) -> Result<Value, String> {
         let body = json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -181,10 +216,7 @@ impl CoremailClient {
                     if value.get("id").and_then(Value::as_u64) != Some(id) {
                         continue;
                     }
-                    if let Some(err) = value.get("error") {
-                        return Err(format!("MCP 返回错误: {err}"));
-                    }
-                    return Ok(value.get("result").cloned().unwrap_or(Value::Null));
+                    return Ok(value);
                 }
                 Ok(SseEvent::Endpoint(_)) => continue,
                 Ok(SseEvent::Closed(err)) => return Err(err),
@@ -269,6 +301,92 @@ pub fn probe_tcp(host: &str, port: u16) -> Result<u64, String> {
         }
     }
     Err(last_error)
+}
+
+fn mail_search_params(pattern: &str, start_time: &str, end_time: &str, limit: u32) -> Value {
+    json!({
+        "name": "mail_search",
+        "arguments": {
+            "pattern": pattern,
+            "start_time": start_time,
+            "end_time": end_time,
+            "limit": limit
+        }
+    })
+}
+
+/// 「测试接口」：真实连一次 MCP 并做一次 mail_search，把收发报文原样带回去
+pub fn search_debug(
+    host: &str,
+    port: u16,
+    pattern: &str,
+    start_time: &str,
+    end_time: &str,
+    limit: u32,
+    mock: bool,
+) -> DebugSearchResult {
+    let request = serde_json::to_string_pretty(&json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": mail_search_params(pattern, start_time, end_time, limit)
+    }))
+    .unwrap_or_default();
+
+    if mock {
+        let mut source = mock::MockSource::new();
+        let response = match source.search(pattern, start_time, end_time, limit) {
+            Ok(items) => {
+                let content: Vec<Value> = items
+                    .iter()
+                    .map(|item| {
+                        json!({
+                            "type": "text",
+                            "text": serde_json::to_string(item).unwrap_or_default()
+                        })
+                    })
+                    .collect();
+                json!({ "jsonrpc": "2.0", "id": 1, "result": { "content": content } })
+            }
+            Err(e) => json!({ "jsonrpc": "2.0", "id": 1, "error": { "message": e } }),
+        };
+        return DebugSearchResult {
+            ok: response.get("error").is_none(),
+            ms: 0,
+            request,
+            response: serde_json::to_string_pretty(&response).unwrap_or_default(),
+            error: response
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        };
+    }
+
+    let started = Instant::now();
+    let result = CoremailClient::connect(host, port).and_then(|mut client| {
+        client.search_debug(pattern, start_time, end_time, limit)
+    });
+    let ms = started.elapsed().as_millis() as u64;
+    match result {
+        Ok((req, resp)) => DebugSearchResult {
+            ok: true,
+            ms,
+            request: req,
+            response: resp,
+            error: None,
+        },
+        Err(e) => {
+            logfile::error(format!("[测试接口] {e}"));
+            DebugSearchResult {
+                ok: false,
+                ms,
+                request,
+                response: String::new(),
+                error: Some(e),
+            }
+        }
+    }
 }
 
 pub fn test_connection(host: &str, port: u16, mock: bool) -> TestConnectionResult {
@@ -361,6 +479,23 @@ mod tests {
             resolve_endpoint(base, "  /messages  "),
             "http://127.0.0.1:11328/messages"
         );
+    }
+
+    #[test]
+    fn debug_search_builds_request_and_response_in_mock_mode() {
+        let result = super::search_debug(
+            "127.0.0.1",
+            11328,
+            "SOC",
+            "20260101000000",
+            "20260101235959",
+            3,
+            true,
+        );
+        assert!(result.ok, "mock 模式应当成功: {:?}", result.error);
+        assert!(result.request.contains("\"mail_search\""));
+        assert!(result.request.contains("\"limit\": 3"));
+        assert!(result.response.contains("\"content\""));
     }
 
     #[test]

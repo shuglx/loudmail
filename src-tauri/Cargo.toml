@@ -37,10 +37,11 @@ auto-launch = "0.5"
 dirs = "5.0"
 # 用系统默认程序打开数据文件 / 目录 / 链接
 open = "3.2"
-# 本地 TTS（模型文件外置，首次构建会拉取预编译静态库）
-sherpa-onnx = "1.13.8"
 # 在线 TTS（微软 Edge Read Aloud 接口）
 edge-tts-rust = "0.1"
+# 内网 TTS（vLLM-Omni Speech API，WebSocket + PCM）
+tungstenite = { version = "0.21", default-features = false, features = ["handshake"] }
+base64 = "0.22"
 # 编译期嵌入 alert-sound 目录，目录内音频自动成为内置铃声
 include_dir = "0.7"
 

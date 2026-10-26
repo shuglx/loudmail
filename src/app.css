@@ -2525,6 +2525,80 @@ button.ringtone-item {
   }
 }
 
+/* 设置页：语音服务的两段式切换 + 内网配置输入框 */
+.tts-tabs {
+  grid-template-columns: repeat(2, 1fr);
+  width: 176px;
+  margin-bottom: 0;
+}
+.tts-input {
+  width: 320px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.tts-input:focus {
+  border-color: var(--ink);
+}
+.tts-input::placeholder {
+  color: var(--muted-2);
+}
+
+/* 「测试接口」弹窗：关键词与「发起测试」同一行 */
+.debug-query {
+  display: flex;
+  align-items: center;
+}
+.debug-query > * + * {
+  margin-left: 8px;
+}
+.debug-query input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.debug-query .select {
+  min-width: 0;
+  width: 86px;
+  flex-shrink: 0;
+}
+/* 「测试接口」弹窗：收发报文 */
+.debug-block {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.debug-block > * + * {
+  margin-top: 6px;
+}
+.debug-label {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.debug-area {
+  height: 132px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: none;
+  overflow: auto;
+  white-space: pre;
+  outline: none;
+}
+.debug-area::placeholder {
+  color: var(--muted-2);
+}
+
 /* ---------- 暗色主题 ---------- */
 :root[data-theme='dark'] {
   color-scheme: dark;

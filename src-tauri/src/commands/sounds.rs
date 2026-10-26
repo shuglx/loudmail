@@ -397,10 +397,17 @@ pub async fn cmd_tts_generate(
     if !config.enabled {
         return Err("TTS 未启用，请先在设置中开启".into());
     }
-    let (samples, rate) = if config.provider == "edge" {
-        tts::synthesize_edge(&content, &config.edge_voice).await?
+    let (samples, rate) = if config.provider == "intranet" {
+        let options = tts::IntranetOptions {
+            url: &config.intranet_url,
+            key: &config.intranet_key,
+            voice: &config.intranet_voice,
+            instructions: &config.intranet_instructions,
+            speed: config.speed,
+        };
+        tts::synthesize_intranet(&options, &content)?
     } else {
-        tts::synthesize(&config.model_dir, &content, config.speed)?
+        tts::synthesize_edge(&content, &config.edge_voice).await?
     };
     let path = temp_wav_path(&state, "tts");
     let duration_ms = mix::write_wav_at(&path, &samples, rate)?;

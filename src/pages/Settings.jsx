@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import Modal from '../components/Modal';
 import Select from '../components/Select';
 import Switch from '../components/Switch';
 import { ExternalIcon } from '../icons';
@@ -12,9 +13,17 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   const [autostart, setAutostart] = useState(Boolean(config?.behavior.autostart));
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [keyword, setKeyword] = useState('');
+  const [limit, setLimit] = useState(3);
+  const [searching, setSearching] = useState(false);
+  const [searchResult, setSearchResult] = useState(null);
   const [appInfo, setAppInfo] = useState(null);
   const [ttsStatus, setTtsStatus] = useState(null);
   const [checkingTts, setCheckingTts] = useState(false);
+  const [ttsUrl, setTtsUrl] = useState(config?.tts.intranetUrl || '');
+  const [ttsKey, setTtsKey] = useState(config?.tts.intranetKey || '');
+  const [ttsInstr, setTtsInstr] = useState(config?.tts.intranetInstructions || '');
 
   useEffect(() => {
     if (!config) return;
@@ -65,6 +74,20 @@ export default function Settings({ config, status, flash, onConfigChange }) {
     }
   };
 
+  const runTestSearch = async () => {
+    const value = keyword.trim();
+    if (!value || searching) return;
+    setSearching(true);
+    setSearchResult(null);
+    try {
+      setSearchResult(await api.testSearch(value, limit));
+    } catch (e) {
+      setSearchResult({ ok: false, ms: 0, request: '', response: '', error: String(e) });
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const testConnection = async () => {
     setTesting(true);
     setTestResult(null);
@@ -93,25 +116,29 @@ export default function Settings({ config, status, flash, onConfigChange }) {
 
   const tts = config.tts || {
     enabled: false,
-    provider: 'local',
+    provider: 'edge',
     edgeVoice: 'zh-CN-XiaoxiaoNeural',
-    modelDir: '',
     speed: 1,
+    intranetUrl: '',
+    intranetKey: '',
+    intranetVoice: 'vivian',
+    intranetInstructions: '播音腔，声音正式，精神饱满，情绪稳定',
   };
 
   const saveTts = (patch) => saveConfig({ tts: { ...tts, ...patch } });
 
-  const pickTtsModelDir = async () => {
-    try {
-      const dir = await api.pickTtsModelDir();
-      if (dir) {
-        await saveTts({ modelDir: dir });
-        setTtsStatus(null);
-      }
-    } catch (e) {
-      flash(String(e));
-    }
+  const switchTts = (provider) => {
+    setTtsStatus(null);
+    saveTts({ provider });
   };
+
+  // 内网配置项同步进本地状态（保存发生在 onBlur）
+  useEffect(() => {
+    if (!config?.tts) return;
+    setTtsUrl(config.tts.intranetUrl || '');
+    setTtsKey(config.tts.intranetKey || '');
+    setTtsInstr(config.tts.intranetInstructions || '');
+  }, [config?.tts?.intranetUrl, config?.tts?.intranetKey, config?.tts?.intranetInstructions]);
 
   const checkTts = async () => {
     setCheckingTts(true);
@@ -204,6 +231,16 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                 <button className="btn btn-sm" onClick={testConnection} disabled={testing}>
                   {testing ? '检测中…' : '测试连接'}
                 </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setSearchOpen(true)}
+                  disabled={!testResult?.overall}
+                  title={
+                    testResult?.overall ? '用 MCP 接口查一次邮件' : '请先测试连接，通过后才能测试接口'
+                  }
+                >
+                  测试接口
+                </button>
               </div>
             </div>
             {testResult ? <TestResult result={testResult} /> : null}
@@ -271,18 +308,84 @@ export default function Settings({ config, status, flash, onConfigChange }) {
               <>
                 <div className="setting-row">
                   <div className="label">
-                    <b>使用在线语音</b>
-                    <small>开启后使用微软语音服务需要联网环境，关闭时则使用本地TTS模型</small>
+                    <b>语音服务</b>
+                    <small>联网服务使用微软语音，内网服务使用内部TTS接口</small>
                   </div>
-                  <Switch
-                    checked={tts.provider === 'edge'}
-                    onChange={(checked) => {
-                      setTtsStatus(null);
-                      saveTts({ provider: checked ? 'edge' : 'local' });
-                    }}
-                  />
+                  <div className="seg-tabs tts-tabs">
+                    <button
+                      className={tts.provider === 'intranet' ? '' : 'active'}
+                      onClick={() => switchTts('edge')}
+                    >
+                      联网服务
+                    </button>
+                    <button
+                      className={tts.provider === 'intranet' ? 'active' : ''}
+                      onClick={() => switchTts('intranet')}
+                    >
+                      内网服务
+                    </button>
+                  </div>
                 </div>
-                {tts.provider === 'edge' ? (
+                {tts.provider === 'intranet' ? (
+                  <>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>服务地址</b>
+                        <small>完整 WebSocket 接口地址，以 ws:// 开头</small>
+                      </div>
+                      <input
+                        className="tts-input"
+                        type="text"
+                        value={ttsUrl}
+                        placeholder="ws://host:port/v1/audio/speech/stream"
+                        onChange={(e) => setTtsUrl(e.target.value)}
+                        onBlur={() => saveTts({ intranetUrl: ttsUrl.trim() })}
+                      />
+                    </div>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>认证信息</b>
+                        <small>可选，填写后以 Bearer Token 携带</small>
+                      </div>
+                      <input
+                        className="tts-input"
+                        type="text"
+                        value={ttsKey}
+                        placeholder="不填则不带鉴权"
+                        onChange={(e) => setTtsKey(e.target.value)}
+                        onBlur={() => saveTts({ intranetKey: ttsKey.trim() })}
+                      />
+                    </div>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>音色选择</b>
+                        <small>内网服务可用音色</small>
+                      </div>
+                      <Select
+                        value={tts.intranetVoice || 'vivian'}
+                        options={[
+                          { value: 'vivian', label: '女声（vivian）' },
+                          { value: 'ryan', label: '男声（ryan）' },
+                        ]}
+                        onChange={(value) => saveTts({ intranetVoice: value })}
+                      />
+                    </div>
+                    <div className="setting-row">
+                      <div className="label">
+                        <b>语气约束词</b>
+                        <small>留空则用服务端默认</small>
+                      </div>
+                      <input
+                        className="tts-input"
+                        type="text"
+                        value={ttsInstr}
+                        placeholder="播音腔，声音正式，精神饱满，情绪稳定"
+                        onChange={(e) => setTtsInstr(e.target.value)}
+                        onBlur={() => saveTts({ intranetInstructions: ttsInstr.trim() })}
+                      />
+                    </div>
+                  </>
+                ) : (
                   <div className="setting-row">
                     <div className="label">
                       <b>音色选择</b>
@@ -297,61 +400,27 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                       onChange={(value) => saveTts({ edgeVoice: value })}
                     />
                   </div>
-                ) : null}
-                {tts.provider === 'edge' ? null : (
-                  <>
-                    <div className="setting-row">
-                      <div className="label">
-                        <b>模型目录</b>
-                        <small>含 .onnx 等文件的模型目录</small>
-                      </div>
-                      <div className="endpoint-actions">
-                        <span className="path-text" title={tts.modelDir || '未选择'}>
-                          {tts.modelDir || '未选择'}
-                        </span>
-                        <button className="btn btn-sm" onClick={pickTtsModelDir}>
-                          选择
-                        </button>
-                      </div>
-                    </div>
-                    <div className="setting-row">
-                      <div className="label">
-                        <b>语速</b>
-                        <small>影响生成的人声节奏</small>
-                      </div>
-                      <Select
-                        value={tts.speed}
-                        options={[
-                          { value: 0.8, label: '0.8×' },
-                          { value: 1, label: '1.0×' },
-                          { value: 1.2, label: '1.2×' },
-                          { value: 1.5, label: '1.5×' },
-                        ]}
-                        onChange={(value) => saveTts({ speed: value })}
-                      />
-                    </div>
-                    <div className="setting-row">
-                      <div className="label">
-                        <b>可用性</b>
-                        <small>检查模型目录与必要文件</small>
-                      </div>
-                      <div className="endpoint-actions">
-                        {ttsStatus ? (
-                          <span className={`conn-inline${ttsStatus.ready ? '' : ' off'}`}>
-                            <i />
-                            {ttsStatus.ready ? '就绪' : '不可用'}
-                          </span>
-                        ) : null}
-                        <button className="btn btn-sm" onClick={checkTts} disabled={checkingTts}>
-                          {checkingTts ? '检测中…' : '检测'}
-                        </button>
-                      </div>
-                    </div>
-                    {ttsStatus && !ttsStatus.ready ? (
-                      <p className="form-error inline">{ttsStatus.message}</p>
-                    ) : null}
-                  </>
                 )}
+                <div className="setting-row">
+                  <div className="label">
+                    <b>可用性</b>
+                    <small>检查当前语音服务配置</small>
+                  </div>
+                  <div className="endpoint-actions">
+                    {ttsStatus ? (
+                      <span className={`conn-inline${ttsStatus.ready ? '' : ' off'}`}>
+                        <i />
+                        {ttsStatus.ready ? '就绪' : '不可用'}
+                      </span>
+                    ) : null}
+                    <button className="btn btn-sm" onClick={checkTts} disabled={checkingTts}>
+                      {checkingTts ? '检测中…' : '检测'}
+                    </button>
+                  </div>
+                </div>
+                {ttsStatus && !ttsStatus.ready ? (
+                  <p className="form-error inline">{ttsStatus.message}</p>
+                ) : null}
               </>
             ) : null}
           </section>
@@ -404,6 +473,59 @@ export default function Settings({ config, status, flash, onConfigChange }) {
           </section>
         </div>
       </div>
+
+      <Modal open={searchOpen} title="测试接口" wide onClose={() => setSearchOpen(false)}>
+        <div className="field">
+          <label>查找关键词</label>
+          <div className="debug-query">
+            <input
+              type="text"
+              value={keyword}
+              placeholder="例如 SOC"
+              onChange={(e) => setKeyword(e.target.value)}
+            />
+            <Select
+              className="debug-limit"
+              value={limit}
+              options={[1, 3, 5, 10].map((n) => ({ value: n, label: `${n} 封` }))}
+              onChange={setLimit}
+            />
+            <button
+              className="btn"
+              onClick={runTestSearch}
+              disabled={searching || !keyword.trim()}
+            >
+              {searching ? '测试中…' : '发起测试'}
+            </button>
+          </div>
+        </div>
+        <div className="debug-block">
+          <span className="debug-label">发送报文</span>
+          <textarea
+            className="debug-area"
+            readOnly
+            spellCheck={false}
+            value={searchResult?.request || ''}
+            placeholder="点击「发起测试」后显示"
+          />
+        </div>
+        <div className="debug-block">
+          <span className="debug-label">返回报文</span>
+          <textarea
+            className="debug-area"
+            readOnly
+            spellCheck={false}
+            value={searchResult?.response || ''}
+            placeholder="点击「发起测试」后显示"
+          />
+        </div>
+        {searchResult && !searchResult.ok ? (
+          <div className="test-banner fail">{`FAIL · ${searchResult.error || '查询失败'}`}</div>
+        ) : null}
+        {searchResult && searchResult.ok ? (
+          <p className="hint">查询完成，用时 {searchResult.ms} ms</p>
+        ) : null}
+      </Modal>
     </section>
   );
 }

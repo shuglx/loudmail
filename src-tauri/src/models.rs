@@ -26,23 +26,51 @@ fn default_theme() -> String {
 #[serde(rename_all = "camelCase")]
 pub struct TtsConfig {
     pub enabled: bool,
-    /// 语音来源：local（本地模型） / edge（微软在线语音）
+    /// 语音来源：edge（微软在线语音，需联网） / intranet（内网 TTS 服务）
     #[serde(default = "default_tts_provider")]
     pub provider: String,
     /// 在线语音音色（edge 模式使用）
     #[serde(default = "default_edge_voice")]
     pub edge_voice: String,
-    /// 外置模型目录（包含 .onnx / tokens.txt / espeak-ng-data）
-    pub model_dir: String,
+    /// 语速倍率（内网模式写入 session.config.speed）
+    #[serde(default = "default_tts_speed")]
     pub speed: f32,
+    /// 内网 TTS 服务地址（ws://.../v1/audio/speech/stream）
+    #[serde(default = "default_intranet_url")]
+    pub intranet_url: String,
+    /// 内网 TTS 认证信息（可空，非空时作为 Bearer Token）
+    #[serde(default)]
+    pub intranet_key: String,
+    /// 内网音色：vivian（女，默认） / ryan（男）
+    #[serde(default = "default_intranet_voice")]
+    pub intranet_voice: String,
+    /// 内网语气约束词，对正式感影响很大
+    #[serde(default = "default_intranet_instructions")]
+    pub intranet_instructions: String,
 }
 
 fn default_tts_provider() -> String {
-    "local".into()
+    "edge".into()
 }
 
 fn default_edge_voice() -> String {
     "zh-CN-XiaoxiaoNeural".into()
+}
+
+fn default_tts_speed() -> f32 {
+    1.0
+}
+
+fn default_intranet_url() -> String {
+    "ws://109.221.17.115:8090/v1/audio/speech/stream".into()
+}
+
+fn default_intranet_voice() -> String {
+    "vivian".into()
+}
+
+fn default_intranet_instructions() -> String {
+    "播音腔，声音正式，精神饱满，情绪稳定".into()
 }
 
 impl Default for TtsConfig {
@@ -51,8 +79,11 @@ impl Default for TtsConfig {
             enabled: false,
             provider: default_tts_provider(),
             edge_voice: default_edge_voice(),
-            model_dir: String::new(),
-            speed: 1.0,
+            speed: default_tts_speed(),
+            intranet_url: default_intranet_url(),
+            intranet_key: String::new(),
+            intranet_voice: default_intranet_voice(),
+            intranet_instructions: default_intranet_instructions(),
         }
     }
 }
@@ -330,6 +361,17 @@ pub struct TestConnectionResult {
     pub tcp: StepResult,
     pub handshake: HandshakeResult,
     pub overall: bool,
+}
+
+/// 「测试接口」的调试结果：直接展示收发报文
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugSearchResult {
+    pub ok: bool,
+    pub ms: u64,
+    pub request: String,
+    pub response: String,
+    pub error: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

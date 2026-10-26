@@ -20,8 +20,6 @@ tauri = { version = "1.8", features = [ "window-maximize", "window-unmaximize",
   "dialog-open",
   "dialog-save",
   "system-tray",
-  # 全局快捷键：Linux 上托盘左键唤出不可用（appindicator 不派发），用它兜底
-  "global-shortcut",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

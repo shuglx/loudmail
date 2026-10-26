@@ -387,21 +387,24 @@ pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
 
         // 诊断：WM 实际给到的几何。pos.y 若不为 0 说明被窗口管理器挪了；
         // 若为 0 但界面仍有留白，则是 webview/内容层的问题。
+        // 注意：不能只在 Ok 分支打日志，读不到时也要落一行，否则无法区分是哪种情况。
         std::thread::sleep(std::time::Duration::from_millis(400));
-        if let (Ok(real_pos), Ok(real_size)) = (window.outer_position(), window.inner_size()) {
-            logfile::info(format!(
-                "[窗口] 几何核对 pos=({}, {}) size={}x{} monitor=({}, {}) {}x{} scale={}",
-                real_pos.x,
-                real_pos.y,
-                real_size.width,
-                real_size.height,
-                monitor.position().x,
-                monitor.position().y,
-                monitor.size().width,
-                monitor.size().height,
-                window.scale_factor().unwrap_or(0.0)
-            ));
-        }
+        let real_pos = match window.outer_position() {
+            Ok(p) => format!("({}, {})", p.x, p.y),
+            Err(e) => format!("err({e})"),
+        };
+        let real_size = match window.inner_size() {
+            Ok(s) => format!("{}x{}", s.width, s.height),
+            Err(e) => format!("err({e})"),
+        };
+        logfile::info(format!(
+            "[窗口] 几何核对 pos={real_pos} size={real_size} monitor=({}, {}) {}x{} scale={}",
+            monitor.position().x,
+            monitor.position().y,
+            monitor.size().width,
+            monitor.size().height,
+            window.scale_factor().unwrap_or(0.0)
+        ));
         return Ok(true);
     }
 

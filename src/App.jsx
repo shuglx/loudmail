@@ -257,7 +257,18 @@ export default function App() {
   const toggleMaximize = () => {
     api
       .toggleMaximizeWindow()
-      .then((value) => setMaximized(Boolean(value)))
+      .then((value) => {
+        setMaximized(Boolean(value));
+        // TEMP-DIAG: webview 视口尺寸，用于区分「窗口没铺满」与「内容没铺满」
+        setTimeout(() => {
+          api
+            .log(
+              'info',
+              `[视口] inner=${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio} screen=${window.screen.width}x${window.screen.height} availH=${window.screen.availHeight}`
+            )
+            .catch(() => {});
+        }, 600);
+      })
       .catch((e) => flash(String(e)));
   };
 

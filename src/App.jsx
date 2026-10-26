@@ -196,17 +196,22 @@ export default function App() {
   }, []);
 
   // 标题栏拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），系统自己跟手；
-  // 双击最大化已去掉，这里拦截内置脚本在 mouseup 上的 __toggleMaximize。
+  // 双击最大化已去掉：内置脚本在 macOS 上走 mouseup、在 Windows/Linux 上走
+  // mousedown（都是 detail===2），两处都要拦，否则 Linux 上还能双击最大化。
   useEffect(() => {
-    const onMouseUp = (event) => {
+    const block = (event) => {
       if (event.button !== 0 || event.detail !== 2) return;
       const target = event.target;
       if (target && target.closest && target.closest('[data-tauri-drag-region]')) {
         event.stopPropagation();
       }
     };
-    window.addEventListener('mouseup', onMouseUp, true);
-    return () => window.removeEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('mousedown', block, true);
+    window.addEventListener('mouseup', block, true);
+    return () => {
+      window.removeEventListener('mousedown', block, true);
+      window.removeEventListener('mouseup', block, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -388,7 +393,7 @@ export default function App() {
               <span className="pb-text">
                 {playback.playing
                   ? `播报中 · 待播 ${playback.pending} 条`
-                  : '暂无播报'}
+                  : '目前无播报'}
               </span>
             </div>
             <div className={`broadcast-off${paused ? ' on' : ''}`}>

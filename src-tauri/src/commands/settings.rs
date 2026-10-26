@@ -342,19 +342,69 @@ pub fn cmd_minimize_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
     let window = app.get_window("main").ok_or("主窗口不存在")?;
-    let maximized = window.is_maximized().map_err(|e| e.to_string())?;
-    if maximized {
-        window.unmaximize().map_err(|e| e.to_string())?;
-        logfile::info("[窗口] 已还原窗口大小");
-    } else {
-        window.maximize().map_err(|e| e.to_string())?;
-        logfile::info("[窗口] 已最大化");
+
+    // Linux（麒麟/GTK）上 maximize() 会按「工作区」铺，顶部若被算作面板区域就会留一条缝。
+    // 这里改成自己按显示器几何铺满，并在还原时恢复原位置与尺寸。
+    #[cfg(target_os = "linux")]
+    {
+        let mut slot = LINUX_RESTORE
+            .lock()
+            .map_err(|_| "窗口状态锁失败".to_string())?;
+        if let Some((x, y, w, h)) = *slot {
+            window
+                .set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)))
+                .map_err(|e| e.to_string())?;
+            window
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)))
+                .map_err(|e| e.to_string())?;
+            *slot = None;
+            logfile::info("[窗口] 已还原窗口大小");
+            let _ = window.set_focus();
+            return Ok(false);
+        }
+
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        let size = window.inner_size().map_err(|e| e.to_string())?;
+        let monitor = window
+            .current_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "未找到当前显示器".to_string())?;
+        *slot = Some((pos.x, pos.y, size.width, size.height));
+        window
+            .set_position(tauri::Position::Physical(*monitor.position()))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_size(tauri::Size::Physical(*monitor.size()))
+            .map_err(|e| e.to_string())?;
+        logfile::info(format!(
+            "[窗口] 已最大化（铺满显示器 {}x{}）",
+            monitor.size().width,
+            monitor.size().height
+        ));
+        let _ = window.set_focus();
+        return Ok(true);
     }
-    // macOS 上 zoom 之后 WKWebView 可能不再重绘（标题栏图标 hover 不出来、
-    // 画面停在旧帧），让它重新成为 key window 即可恢复。
-    let _ = window.set_focus();
-    Ok(!maximized)
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let maximized = window.is_maximized().map_err(|e| e.to_string())?;
+        if maximized {
+            window.unmaximize().map_err(|e| e.to_string())?;
+            logfile::info("[窗口] 已还原窗口大小");
+        } else {
+            window.maximize().map_err(|e| e.to_string())?;
+            logfile::info("[窗口] 已最大化");
+        }
+        // macOS 上 zoom 之后 WKWebView 可能不再重绘（标题栏图标 hover 不出来、
+        // 画面停在旧帧），让它重新成为 key window 即可恢复。
+        let _ = window.set_focus();
+        return Ok(!maximized);
+    }
 }
+
+/// Linux 上自己实现最大化，需要记住还原用的原始几何
+#[cfg(target_os = "linux")]
+static LINUX_RESTORE: std::sync::Mutex<Option<(i32, i32, u32, u32)>> = std::sync::Mutex::new(None);
 
 #[tauri::command]
 pub fn cmd_is_window_maximized(app: AppHandle) -> Result<bool, String> {

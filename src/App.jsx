@@ -195,17 +195,18 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // 标题栏拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），系统自己跟手。
-  // 双击最大化只在 macOS 上禁用（内置脚本在 macOS 走 mouseup、在 Windows/Linux 走
-  // mousedown，都是 detail===2）；Windows / Linux 保留系统原生的双击最大化。
+  // 双击标题栏：macOS 禁用（内置脚本走 mouseup，容易和拖拽会话打架），
+  // Windows / Linux 交给「我们自己的」最大化命令——内置脚本默认走 appWindow.maximize()，
+  // 会绕过我们的日志、图标状态和 Linux 的铺满逻辑，导致双击和绿点行为不一致。
   useEffect(() => {
-    if (!/Mac/i.test(navigator.userAgent)) return undefined;
+    const isMac = /Mac/i.test(navigator.userAgent);
     const block = (event) => {
       if (event.button !== 0 || event.detail !== 2) return;
       const target = event.target;
-      if (target && target.closest && target.closest('[data-tauri-drag-region]')) {
-        event.stopPropagation();
-      }
+      if (!target || !target.closest || !target.closest('[data-tauri-drag-region]')) return;
+      // 打断内置脚本（macOS 在 mouseup、Windows/Linux 在 mousedown 触发）
+      event.stopPropagation();
+      if (!isMac && event.type === 'mousedown') toggleMaximizeRef.current();
     };
     window.addEventListener('mousedown', block, true);
     window.addEventListener('mouseup', block, true);
@@ -254,6 +255,7 @@ export default function App() {
       .catch((e) => flash(String(e)));
   };
 
+  const toggleMaximizeRef = useRef(() => {});
   const toggleMaximize = () => {
     api
       .toggleMaximizeWindow()
@@ -264,13 +266,15 @@ export default function App() {
           api
             .log(
               'info',
-              `[视口] inner=${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio} screen=${window.screen.width}x${window.screen.height} availH=${window.screen.availHeight}`
+              `[视口] inner=${window.innerWidth}x${window.innerHeight} outer=${window.outerWidth}x${window.outerHeight} pos=${window.screenX},${window.screenY} dpr=${window.devicePixelRatio} screen=${window.screen.width}x${window.screen.height} availH=${window.screen.availHeight}`
             )
             .catch(() => {});
         }, 600);
       })
       .catch((e) => flash(String(e)));
   };
+  // 双击标题栏的处理函数早于 toggleMaximize 定义，用 ref 转发当前实现
+  toggleMaximizeRef.current = toggleMaximize;
 
   useEffect(() => {
     let disposed = false;

@@ -378,6 +378,9 @@ pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
         window
             .set_position(tauri::Position::Physical(*monitor.position()))
             .map_err(|e| e.to_string())?;
+        // 部分 WM 在 resize 之后会重新摆放窗口，等它稳定后再定一次位
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let _ = window.set_position(tauri::Position::Physical(*monitor.position()));
         logfile::info(format!(
             "[窗口] 已最大化（铺满显示器 {}x{}）",
             monitor.size().width,

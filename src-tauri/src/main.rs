@@ -24,7 +24,21 @@ pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
-        let _ = window.set_focus();
+
+        // Linux 下（ukui-kwin 等 WM）仅 show + set_focus 不会把已被其它窗口盖住的
+        // 主窗口提到最前，只有从未显示状态唤出才有效。这里用「临时置顶 → 聚焦 → 取消置顶」
+        // 强制提升一次；macOS / Windows 的 set_focus 本身就会前置，无需额外处理。
+        #[cfg(target_os = "linux")]
+        {
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_focus();
+            let _ = window.set_always_on_top(false);
+            logfile::info("[窗口] 唤出主窗口（Linux：临时置顶提升 + 聚焦）");
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = window.set_focus();
+        }
     }
 }
 

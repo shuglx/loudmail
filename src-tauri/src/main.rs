@@ -11,6 +11,10 @@ mod state;
 mod store;
 mod system;
 
+// Linux 专用的 X11 EWMH 前置/聚焦(见 show_main 的 Linux 分支)
+#[cfg(target_os = "linux")]
+mod x11;
+
 use std::path::PathBuf;
 
 use tauri::{
@@ -25,15 +29,27 @@ pub fn show_main(app: &AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
 
-        // Linux 下（ukui-kwin 等 WM）仅 show + set_focus 不会把已被其它窗口盖住的
-        // 主窗口提到最前，只有从未显示状态唤出才有效。这里用「临时置顶 → 聚焦 → 取消置顶」
-        // 强制提升一次；macOS / Windows 的 set_focus 本身就会前置，无需额外处理。
+        // Linux 下(ukui-kwin 等 WM)tao 的 set_focus / set_always_on_top 都不可靠:
+        // GTK 的激活请求会被「防抢焦点」机制忽略(窗口被其它应用盖住时提不到最前),
+        // GTK 的 keep_above 在 UKUI 上同样不一定被理会。参考 kylinpaste 的实测做法:
+        // show 之后等窗口进入 _NET_CLIENT_LIST,直接向根窗口发 EWMH _NET_ACTIVE_WINDOW
+        // (source=2,用户主动请求,WM 会放行),由 activate_window 内部兜底 XSetInputFocus
+        // (见 src/x11.rs);macOS / Windows 的 set_focus 本身就会前置,无需额外处理。
         #[cfg(target_os = "linux")]
         {
-            let _ = window.set_always_on_top(true);
-            let _ = window.set_focus();
-            let _ = window.set_always_on_top(false);
-            logfile::info("[窗口] 唤出主窗口（Linux：临时置顶提升 + 聚焦）");
+            let handle = app.clone();
+            std::thread::spawn(move || {
+                for _ in 0..10 {
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                    if let Some(xid) = x11::main_window_xid() {
+                        if x11::activate_window(xid) {
+                            logfile::info("[窗口] 已通过 EWMH 前置并聚焦主窗口");
+                            return;
+                        }
+                    }
+                }
+                logfile::warn("[窗口] EWMH 前置主窗口未成功(桌面可能未响应激活请求)");
+            });
         }
         #[cfg(not(target_os = "linux"))]
         {

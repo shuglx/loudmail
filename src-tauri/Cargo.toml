@@ -45,6 +45,10 @@ base64 = "0.22"
 # 编译期嵌入 alert-sound 目录，目录内音频自动成为内置铃声
 include_dir = "0.7"
 
+# X11 底层能力：按 EWMH 强制前置并聚焦主窗口（见 src/x11.rs，做法同 kylinpaste）
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

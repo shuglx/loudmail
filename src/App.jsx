@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { appWindow } from '@tauri-apps/api/window';
 import { api } from './api';
 import watermarkUrl from '../icon-shadow.png';
 import Toast from './components/Toast';
@@ -163,28 +162,27 @@ export default function App() {
     }
   }, [config?.theme]);
 
+  // 最大化状态只需要在启动时读一次：之后只有绿点按钮能改变它（双击最大化已禁用），
+  // 按钮会直接返回新状态，不需要任何监听。
   useEffect(() => {
-    let disposed = false;
-    const syncMaximized = () => {
-      api
-        .isWindowMaximized()
-        .then((value) => {
-          if (!disposed) setMaximized(Boolean(value));
-        })
-        .catch(() => {});
-    };
-    syncMaximized();
-    let unlisten = null;
-    listen('tauri://resize', syncMaximized)
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
+    api
+      .isWindowMaximized()
+      .then((value) => setMaximized(Boolean(value)))
       .catch(() => {});
-    return () => {
-      disposed = true;
-      if (unlisten) unlisten();
+  }, []);
+
+  // 标题栏拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），系统自己跟手；
+  // 双击最大化已去掉，这里拦截内置脚本在 mouseup 上的 __toggleMaximize。
+  useEffect(() => {
+    const onMouseUp = (event) => {
+      if (event.button !== 0 || event.detail !== 2) return;
+      const target = event.target;
+      if (target && target.closest && target.closest('[data-tauri-drag-region]')) {
+        event.stopPropagation();
+      }
     };
+    window.addEventListener('mouseup', onMouseUp, true);
+    return () => window.removeEventListener('mouseup', onMouseUp, true);
   }, []);
 
   useEffect(() => {
@@ -231,17 +229,6 @@ export default function App() {
       .toggleMaximizeWindow()
       .then((value) => setMaximized(Boolean(value)))
       .catch((e) => flash(String(e)));
-  };
-
-  // 标题栏自绘拖动：单击拖动窗口，双击最大化 / 还原
-  const onTitlebarMouseDown = (event) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    if (event.detail === 2) {
-      toggleMaximize();
-      return;
-    }
-    if (event.detail === 1) appWindow.startDragging().catch(() => {});
   };
 
   useEffect(() => {
@@ -307,8 +294,8 @@ export default function App() {
             {maximized ? <RestoreGlyph /> : <ExpandGlyph />}
           </button>
         </div>
-        {/* 单击拖动、双击最大化 / 还原，状态由 resize 事件回填 */}
-        <div className="titlebar-drag" onMouseDown={onTitlebarMouseDown}>
+        {/* 拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），双击最大化已禁用 */}
+        <div className="titlebar-drag" data-tauri-drag-region>
           <span className="titlebar-title">LoudMail</span>
           <span className="proto-badge">v{appVersion || '—'}</span>
         </div>

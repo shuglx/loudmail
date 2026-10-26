@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import Select from '../components/Select';
 import Switch from '../components/Switch';
 import { ExternalIcon } from '../icons';
 
@@ -148,14 +149,14 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                 <b>界面主题</b>
                 <small>暗色模式适合夜间值守</small>
               </div>
-              <select
-                className="control"
+              <Select
                 value={config.theme === 'dark' ? 'dark' : 'light'}
-                onChange={(e) => saveConfig({ theme: e.target.value })}
-              >
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-              </select>
+                options={[
+                  { value: 'light', label: '浅色' },
+                  { value: 'dark', label: '深色' },
+                ]}
+                onChange={(value) => saveConfig({ theme: value })}
+              />
             </div>
           </section>
         </div>
@@ -211,30 +212,30 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                 <b>扫描间隔</b>
                 <small>每条启用策略的轮询周期</small>
               </div>
-              <select
-                className="control"
+              <Select
                 value={config.scan.intervalSec}
-                onChange={(e) => saveConfig({ scan: { ...config.scan, intervalSec: Number(e.target.value) } })}
-              >
-                <option value={60}>1 分钟</option>
-                <option value={120}>2 分钟</option>
-                <option value={180}>3 分钟</option>
-              </select>
+                options={[
+                  { value: 60, label: '1 分钟' },
+                  { value: 120, label: '2 分钟' },
+                  { value: 180, label: '3 分钟' },
+                ]}
+                onChange={(value) => saveConfig({ scan: { ...config.scan, intervalSec: value } })}
+              />
             </div>
             <div className="setting-row">
               <div className="label">
                 <b>检索时间窗</b>
                 <small>每次轮询检索最近多久的邮件</small>
               </div>
-              <select
-                className="control"
+              <Select
                 value={config.scan.lookbackMin}
-                onChange={(e) => saveConfig({ scan: { ...config.scan, lookbackMin: Number(e.target.value) } })}
-              >
-                <option value={10}>10 分钟</option>
-                <option value={30}>30 分钟</option>
-                <option value={60}>60 分钟</option>
-              </select>
+                options={[
+                  { value: 10, label: '10 分钟' },
+                  { value: 30, label: '30 分钟' },
+                  { value: 60, label: '60 分钟' },
+                ]}
+                onChange={(value) => saveConfig({ scan: { ...config.scan, lookbackMin: value } })}
+              />
             </div>
             <div className="setting-row">
               <div className="label">
@@ -287,14 +288,14 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                       <b>音色选择</b>
                       <small>选择配音性别</small>
                     </div>
-                    <select
-                      className="control"
+                    <Select
                       value={tts.edgeVoice || 'zh-CN-XiaoxiaoNeural'}
-                      onChange={(e) => saveTts({ edgeVoice: e.target.value })}
-                    >
-                      <option value="zh-CN-XiaoxiaoNeural">女声（晓晓）</option>
-                      <option value="zh-CN-YunyangNeural">男声（云扬）</option>
-                    </select>
+                      options={[
+                        { value: 'zh-CN-XiaoxiaoNeural', label: '女声（晓晓）' },
+                        { value: 'zh-CN-YunyangNeural', label: '男声（云扬）' },
+                      ]}
+                      onChange={(value) => saveTts({ edgeVoice: value })}
+                    />
                   </div>
                 ) : null}
                 {tts.provider === 'edge' ? null : (
@@ -318,16 +319,16 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                         <b>语速</b>
                         <small>影响生成的人声节奏</small>
                       </div>
-                      <select
-                        className="control"
+                      <Select
                         value={tts.speed}
-                        onChange={(e) => saveTts({ speed: Number(e.target.value) })}
-                      >
-                        <option value={0.8}>0.8×</option>
-                        <option value={1}>1.0×</option>
-                        <option value={1.2}>1.2×</option>
-                        <option value={1.5}>1.5×</option>
-                      </select>
+                        options={[
+                          { value: 0.8, label: '0.8×' },
+                          { value: 1, label: '1.0×' },
+                          { value: 1.2, label: '1.2×' },
+                          { value: 1.5, label: '1.5×' },
+                        ]}
+                        onChange={(value) => saveTts({ speed: value })}
+                      />
                     </div>
                     <div className="setting-row">
                       <div className="label">

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
+import Select from '../components/Select';
 import {
   DownloadIcon,
   PencilIcon,
@@ -518,22 +519,20 @@ export default function Sounds({ sounds, strategies, flash, onRefresh }) {
                   <div className="compose-col ring-col">
                     <div className="compose-head">
                       <span>① 报警铃声</span>
-                      <label className="loops">
+                      <div className="loops">
                         循环
-                        <select
+                        <Select
                           value={draft.loops}
-                          onChange={(e) => {
-                            patch({ loops: Number(e.target.value) });
+                          options={[1, 2, 3, 4, 5].map((n) => ({
+                            value: n,
+                            label: `${n} 次`,
+                          }))}
+                          onChange={(value) => {
+                            patch({ loops: value });
                             resetComposed();
                           }}
-                        >
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <option key={n} value={n}>
-                              {n} 次
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        />
+                      </div>
                     </div>
                     <div className="ringtone-list">
                       <button

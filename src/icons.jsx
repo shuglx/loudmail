@@ -189,3 +189,9 @@ export const ChevronRightIcon = ({ size = 15 }) => (
     <path d="M9 5l7 7-7 7" />
   </Svg>
 );
+
+export const ChevronDownIcon = ({ size = 12 }) => (
+  <Svg size={size}>
+    <path d="M5 9l7 7 7-7" />
+  </Svg>
+);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
+import Select from '../components/Select';
 import Switch from '../components/Switch';
 import {
   ExportIcon,
@@ -444,17 +445,18 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
             报警音频 <span className="req">*</span>
           </label>
           <div className="field-row">
-            <select
+            <Select
               value={form.soundId}
-              onChange={(e) => setForm({ ...form, soundId: e.target.value })}
-            >
-              {sounds.length === 0 ? <option value="">请先在语音库添加语音</option> : null}
-              {sounds.map((sound) => (
-                <option key={sound.id} value={sound.id}>
-                  {sound.name} · {formatDuration(sound.durationMs)}
-                </option>
-              ))}
-            </select>
+              options={
+                sounds.length === 0
+                  ? [{ value: '', label: '请先在语音库添加语音' }]
+                  : sounds.map((sound) => ({
+                      value: sound.id,
+                      label: `${sound.name} · ${formatDuration(sound.durationMs)}`,
+                    }))
+              }
+              onChange={(value) => setForm({ ...form, soundId: value })}
+            />
             <button
               className="btn"
               type="button"

@@ -209,6 +209,9 @@ pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
         window.maximize().map_err(|e| e.to_string())?;
         logfile::info("[窗口] 已最大化");
     }
+    // macOS 上 zoom 之后 WKWebView 可能不再重绘（标题栏图标 hover 不出来、
+    // 画面停在旧帧），让它重新成为 key window 即可恢复。
+    let _ = window.set_focus();
     Ok(!maximized)
 }
 

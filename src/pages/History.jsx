@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
+import Select from '../components/Select';
 import { SearchIcon, ChevronRightIcon, TrashIcon } from '../icons';
 
 function pageList(current, total) {
@@ -100,27 +101,23 @@ export default function History({ history, flash, onCleared }) {
             onChange={(e) => setQueryAndReset(e.target.value)}
           />
         </label>
-        <select
-          className="control"
+        <Select
           value={filter}
-          onChange={(e) => setFilterAndReset(e.target.value)}
-        >
-          <option value="all">全部策略</option>
-          {strategyNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="control"
+          options={[
+            { value: 'all', label: '全部策略' },
+            ...strategyNames.map((name) => ({ value: name, label: name })),
+          ]}
+          onChange={setFilterAndReset}
+        />
+        <Select
           value={pageSize}
-          onChange={(e) => setPageSizeAndReset(e.target.value)}
-        >
-          <option value={10}>每页 10 条</option>
-          <option value={25}>每页 25 条</option>
-          <option value={50}>每页 50 条</option>
-        </select>
+          options={[
+            { value: 10, label: '每页 10 条' },
+            { value: 25, label: '每页 25 条' },
+            { value: 50, label: '每页 50 条' },
+          ]}
+          onChange={setPageSizeAndReset}
+        />
         <span className="toolbar-note">滚动保留最新 500 条</span>
       </div>
 
@@ -174,20 +171,22 @@ export default function History({ history, flash, onCleared }) {
               key={record.id}
               onClick={() => setSelected(record)}
             >
-              <span className="history-time">{record.time.slice(5, 16)}</span>
-              <span className="history-strategy" title={record.strategyName}>
-                {record.strategyName}
-              </span>
-              <span className="history-main">
-                <b title={record.subject}>{record.subject}</b>
-                <span>{record.sender}</span>
-              </span>
-              <span className="history-side">
-                <span className="tag">
-                  {record.soundName} × {record.playCount}
+              <span className="history-grid">
+                <span className="history-time">{record.time.slice(5, 16)}</span>
+                <span className="history-strategy" title={record.strategyName}>
+                  {record.strategyName}
                 </span>
-                <span className="chev">
-                  <ChevronRightIcon />
+                <span className="history-main">
+                  <b title={record.subject}>{record.subject}</b>
+                  <span>{record.sender}</span>
+                </span>
+                <span className="history-side">
+                  <span className="tag">
+                    {record.soundName} × {record.playCount}
+                  </span>
+                  <span className="chev">
+                    <ChevronRightIcon />
+                  </span>
                 </span>
               </span>
             </button>

@@ -52,12 +52,14 @@ impl CoremailClient {
         let endpoint = loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match rx.recv_timeout(remaining) {
-                Ok(SseEvent::Endpoint(endpoint)) => break endpoint,
+                Ok(SseEvent::Endpoint(raw)) => break resolve_endpoint(&base, &raw),
                 Ok(SseEvent::Closed(err)) => return Err(err),
                 Ok(SseEvent::Message(_)) => continue,
                 Err(_) => return Err("等待 SSE endpoint 超时".into()),
             }
         };
+
+        logfile::info(format!("[MCP] SSE endpoint: {endpoint}"));
 
         let http = Client::builder()
             .timeout(Duration::from_secs(15))
@@ -192,6 +194,28 @@ impl CoremailClient {
     }
 }
 
+/// MCP 的 SSE 传输里，`endpoint` 事件给出的地址允许是相对路径
+/// （例如 `/messages?sessionId=xxx`），必须基于 SSE 自身的地址解析成绝对地址。
+/// 直接拿相对路径去 reqwest 请求会报 "builder error: relative URL without a base"。
+fn resolve_endpoint(base: &str, endpoint: &str) -> String {
+    let endpoint = endpoint.trim();
+    if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+        return endpoint.to_string();
+    }
+    let joined = url::Url::parse(base)
+        .ok()
+        .and_then(|base_url| base_url.join(endpoint).ok())
+        .map(|url| url.to_string());
+    match joined {
+        Some(url) => url,
+        None => format!(
+            "{}/{}",
+            base.trim_end_matches('/'),
+            endpoint.trim_start_matches('/')
+        ),
+    }
+}
+
 fn read_sse(response: reqwest::blocking::Response, tx: Sender<SseEvent>) {
     let reader = BufReader::new(response);
     let mut event = String::new();
@@ -315,5 +339,35 @@ pub fn test_connection(host: &str, port: u16, mock: bool) -> TestConnectionResul
             },
             overall: false,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_endpoint;
+
+    #[test]
+    fn resolves_relative_endpoint_against_base() {
+        let base = "http://127.0.0.1:11328";
+        assert_eq!(
+            resolve_endpoint(base, "/messages?sessionId=abc"),
+            "http://127.0.0.1:11328/messages?sessionId=abc"
+        );
+        assert_eq!(
+            resolve_endpoint(base, "messages?sessionId=abc"),
+            "http://127.0.0.1:11328/messages?sessionId=abc"
+        );
+        assert_eq!(
+            resolve_endpoint(base, "  /messages  "),
+            "http://127.0.0.1:11328/messages"
+        );
+    }
+
+    #[test]
+    fn keeps_absolute_endpoint() {
+        assert_eq!(
+            resolve_endpoint("http://127.0.0.1:11328", "http://10.0.0.5:11328/messages"),
+            "http://10.0.0.5:11328/messages"
+        );
     }
 }

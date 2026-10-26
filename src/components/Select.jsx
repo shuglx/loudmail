@@ -43,10 +43,18 @@ export default function Select({
       if (menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
-    // 用户滚动（滚轮 / 触控板）时关掉，避免菜单跟按钮脱开。
-    // 这里只监听 wheel，不用 scroll / resize：窗口 resize 事件在 macOS 上可能高频连发，
-    // 逐个处理会牵连主线程，菜单没必要跟着动。
-    const close = () => setOpen(false);
+    // 光标在菜单里时：只滚菜单，且阻止冒泡到外层弹框（否则会把背后的编辑弹框滚走）。
+    // 光标在菜单外时才关闭菜单，避免菜单和按钮脱开。
+    // 只监听 wheel，不用 scroll / resize：窗口 resize 事件在 macOS 上可能高频连发。
+    const onWheel = (event) => {
+      const el = menuRef.current;
+      if (el && el.contains(event.target)) {
+        event.preventDefault();
+        el.scrollTop += event.deltaY;
+        return;
+      }
+      setOpen(false);
+    };
     const onKey = (event) => {
       if (event.key === 'Escape') {
         // 拦住事件，避免菜单一关把外层弹窗也一起关掉
@@ -55,11 +63,11 @@ export default function Select({
       }
     };
     window.addEventListener('mousedown', onDown);
-    window.addEventListener('wheel', close, { capture: true, passive: true });
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
     window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('wheel', close, { capture: true });
+      window.removeEventListener('wheel', onWheel, { capture: true });
       window.removeEventListener('keydown', onKey, true);
     };
   }, [open]);

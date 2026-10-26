@@ -305,6 +305,21 @@ button:focus {
 .playback-status > * + * {
   margin-left: 7px;
 }
+/* 播报区域下方的全局开关：暂停全部播报 */
+.broadcast-off {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.broadcast-off.on {
+  color: var(--red);
+}
+.broadcast-off > * + * {
+  margin-left: 8px;
+}
 .pb-ico {
   display: grid;
   place-items: center;
@@ -924,6 +939,33 @@ code.keyword {
 }
 .switch input:checked + span::after {
   transform: translateX(14px);
+}
+/* 设置页里「仅限开发人员调试」这类风险提示 */
+.dev-warn {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* 方形开关：用于「暂停全部播报」这类危险操作，开启时红色背景 */
+.switch.square {
+  width: 30px;
+  height: 22px;
+}
+.switch.square span {
+  border-radius: 6px;
+}
+.switch.square span::after {
+  top: 5px;
+  left: 5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+.switch.square input:checked + span {
+  background: var(--red);
+}
+.switch.square input:checked + span::after {
+  transform: translateX(8px);
 }
 
 /* ---------- 空状态 ---------- */
@@ -2567,6 +2609,9 @@ button.ringtone-item {
   width: 86px;
   flex-shrink: 0;
 }
+.debug-query .debug-window {
+  width: 104px;
+}
 /* 「测试接口」弹窗：收发报文 */
 .debug-block {
   display: flex;
@@ -2717,7 +2762,7 @@ button.ringtone-item {
 :root[data-theme='dark'] .dropzone:hover {
   border-color: #4f5763;
 }
-:root[data-theme='dark'] .playback-status {
+:root[data-theme='dark'] .playback-status:not(.idle) {
   border-color: #234238;
 }
 :root[data-theme='dark'] .help-table tbody tr:hover td {

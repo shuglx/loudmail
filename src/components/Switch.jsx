@@ -1,6 +1,14 @@
-export default function Switch({ checked, onChange, title }) {
+export default function Switch({ checked, onChange, title, shape = 'pill', variant = 'default' }) {
+  const className = [
+    'switch',
+    shape === 'square' ? 'square' : '',
+    variant === 'danger' ? 'danger' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <label className="switch" title={title}>
+    <label className={className} title={title}>
       <input
         type="checkbox"
         checked={checked}

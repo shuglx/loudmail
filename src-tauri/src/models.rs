@@ -62,7 +62,7 @@ fn default_tts_speed() -> f32 {
 }
 
 fn default_intranet_url() -> String {
-    "ws://109.221.17.115:8090/v1/audio/speech/stream".into()
+    "ws://ip:port/v1/audio/speech/stream".into()
 }
 
 fn default_intranet_voice() -> String {

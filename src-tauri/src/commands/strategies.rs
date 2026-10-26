@@ -19,7 +19,7 @@ const EXPORT_KIND: &str = "loudmail.strategies";
 fn normalize_sender(raw: &str) -> Result<String, String> {
     let value = raw.trim();
     if value.is_empty() {
-        return Ok(String::new());
+        return Err("请填写发件人邮箱".into());
     }
     let email = if let (Some(start), Some(end)) = (value.rfind('<'), value.rfind('>')) {
         if end > start {
@@ -197,8 +197,14 @@ pub fn cmd_import_strategies(
             result.skipped += 1;
             continue;
         }
-        // 发件人格式不合法时按「任意发件人」处理
-        let sender = normalize_sender(&item.sender).unwrap_or_default();
+        // 发件人已改为必填：缺失或格式不合法时跳过该条
+        let sender = match normalize_sender(&item.sender) {
+            Ok(value) => value,
+            Err(_) => {
+                result.skipped += 1;
+                continue;
+            }
+        };
         let sound_id = item
             .sound_id
             .clone()

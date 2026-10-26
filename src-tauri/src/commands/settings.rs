@@ -62,9 +62,61 @@ pub fn cmd_set_config(
     {
         return Err("在线音色仅支持晓晓 / 云扬".into());
     }
+    // 端点 / 模拟开关变化时，旧连接立即失效，并在后台立刻探一次，
+    // 让状态马上反映"改完之后到底通不通"，不必等下一轮（也避免连续两次失败才翻红）
+    let endpoint_changed = {
+        let current = state.config.read().map(|c| c.clone()).ok();
+        match current {
+            Some(old) => {
+                old.mcp.host != config.mcp.host
+                    || old.mcp.port != config.mcp.port
+                    || old.behavior.mock != config.behavior.mock
+            }
+            None => false,
+        }
+    };
+
     *state.config.write().map_err(|e| e.to_string())? = config.clone();
     state.save_config()?;
     state.config_version.fetch_add(1, Ordering::Relaxed);
+
+    if endpoint_changed {
+        let state = state.inner().clone();
+        let host = config.mcp.host.clone();
+        let port = config.mcp.port;
+        let mock = config.behavior.mock;
+        std::thread::spawn(move || {
+            let mut next = RuntimeStatus::default();
+            next.mock = mock;
+            if mock {
+                next.connected = true;
+                next.server_name = Some("Mock MailBox".into());
+                logfile::info("[连接] 已切换到模拟邮箱");
+            } else {
+                let result = mcp::test_connection(&host, port, false);
+                next.connected = result.overall;
+                if let Some(info) = result.handshake.server_info.as_ref() {
+                    next.server_name = Some(info.name.clone());
+                    next.server_version = Some(info.version.clone());
+                }
+                next.last_error = if result.overall {
+                    None
+                } else {
+                    result
+                        .handshake
+                        .error
+                        .clone()
+                        .or_else(|| result.tcp.error.clone())
+                };
+                logfile::info(format!(
+                    "[连接] 端点变更后立即探测 {host}:{port} -> {}",
+                    if result.overall { "可达" } else { "不可达" }
+                ));
+            }
+            state.set_runtime(next);
+        });
+    }
+
     Ok(config)
 }
 
@@ -79,7 +131,30 @@ pub fn cmd_test_connection(
         .read()
         .map(|c| c.behavior.mock)
         .unwrap_or(false);
-    mcp::test_connection(&host, port, mock)
+    let result = mcp::test_connection(&host, port, mock);
+    // 显式「检查连接」：把结果写进运行状态
+    let mut next = state
+        .runtime
+        .read()
+        .map(|r| r.clone())
+        .unwrap_or_default();
+    next.mock = mock;
+    next.connected = result.overall;
+    if result.overall {
+        next.last_error = None;
+        if let Some(info) = result.handshake.server_info.as_ref() {
+            next.server_name = Some(info.name.clone());
+            next.server_version = Some(info.version.clone());
+        }
+    } else {
+        next.last_error = result
+            .handshake
+            .error
+            .clone()
+            .or_else(|| result.tcp.error.clone());
+    }
+    state.set_runtime(next);
+    result
 }
 
 /// 调试用：用 MCP 接口查一次邮件（limit 3），返回收发报文
@@ -88,6 +163,7 @@ pub fn cmd_test_search(
     state: State<'_, Arc<AppState>>,
     keyword: String,
     limit: u32,
+    all_time: bool,
 ) -> DebugSearchResult {
     let (host, port, lookback_min, mock) = match state.config.read() {
         Ok(config) => (
@@ -100,12 +176,33 @@ pub fn cmd_test_search(
     };
     let end = Local::now();
     let start = end - ChronoDuration::minutes(lookback_min as i64);
-    let start_time = start.format("%Y%m%d%H%M%S").to_string();
+    // all_time=true 表示「不限」：下界给一个足够早的时间，仍显式传起止时间
+    let start_time = if all_time {
+        "20000101000000".to_string()
+    } else {
+        start.format("%Y%m%d%H%M%S").to_string()
+    };
     let end_time = end.format("%Y%m%d%H%M%S").to_string();
     logfile::info(format!(
-        "[测试接口] keyword={keyword} limit={limit} window={start_time}~{end_time}"
+        "[测试接口] keyword={keyword} limit={limit} window={}",
+        if all_time {
+            format!("不限~{end_time}")
+        } else {
+            format!("{start_time}~{end_time}")
+        }
     ));
-    mcp::search_debug(&host, port, &keyword, &start_time, &end_time, limit, mock)
+    let result = mcp::search_debug(&host, port, &keyword, &start_time, &end_time, limit, mock);
+    // 显式「发起测试」：同样以这次结果刷新运行状态
+    let mut next = state
+        .runtime
+        .read()
+        .map(|r| r.clone())
+        .unwrap_or_default();
+    next.mock = mock;
+    next.connected = result.ok;
+    next.last_error = result.error.clone();
+    state.set_runtime(next);
+    result
 }
 
 #[tauri::command]
@@ -268,6 +365,28 @@ pub fn cmd_is_window_maximized(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 pub fn cmd_show_window(app: AppHandle) {
     crate::show_main(&app);
+}
+
+/// 是否已暂停全部播报
+#[tauri::command]
+pub fn cmd_get_broadcast_paused(state: State<'_, Arc<AppState>>) -> bool {
+    state.paused.load(Ordering::Relaxed)
+}
+
+/// 停用 / 恢复全部播报（替代原托盘菜单里的「暂停播报」）
+#[tauri::command]
+pub fn cmd_set_broadcast_paused(state: State<'_, Arc<AppState>>, paused: bool) -> bool {
+    state.paused.store(paused, Ordering::Relaxed);
+    if paused {
+        // 停用：立即停止当前播报并清空待播队列
+        state.player.stop_all();
+        logfile::info("[播报] 已暂停全部播报，停止轮询匹配");
+    } else {
+        // 恢复：只播报今后新命中的邮件，跳过停用期间积压的
+        state.skip_backlog.store(true, Ordering::Relaxed);
+        logfile::info("[播报] 已恢复播报，跳过停用期间的积压邮件");
+    }
+    paused
 }
 
 #[tauri::command]

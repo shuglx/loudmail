@@ -36,7 +36,7 @@ export const api = {
   testPlayback: () => invoke('cmd_test_playback'),
   ttsStatus: () => invoke('cmd_tts_status'),
   testConnection: (host, port) => invoke('cmd_test_connection', { host, port }),
-  testSearch: (keyword, limit) => invoke('cmd_test_search', { keyword, limit }),
+  testSearch: (keyword, limit, allTime) => invoke('cmd_test_search', { keyword, limit, allTime }),
   getRuntimeStatus: () => invoke('cmd_get_runtime_status'),
   getAutostart: () => invoke('cmd_get_autostart'),
   setAutostart: (enabled) => invoke('cmd_set_autostart', { enabled }),
@@ -51,4 +51,6 @@ export const api = {
   isWindowMaximized: () => invoke('cmd_is_window_maximized'),
   showWindow: () => invoke('cmd_show_window'),
   quitApp: () => invoke('cmd_quit_app'),
+  getBroadcastPaused: () => invoke('cmd_get_broadcast_paused'),
+  setBroadcastPaused: (paused) => invoke('cmd_set_broadcast_paused', { paused }),
 };

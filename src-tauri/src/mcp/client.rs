@@ -191,6 +191,17 @@ impl CoremailClient {
 
     /// 返回完整的 JSON-RPC 报文（含 id/result/error），供调试展示用
     fn call_envelope(&mut self, id: u64, method: &str, params: Value) -> Result<Value, String> {
+        // 先看看 SSE 会话是不是已经被服务端关闭（空闲回收），避免白等超时
+        if let Some(session) = self.sse.as_ref() {
+            match session.rx.try_recv() {
+                Ok(SseEvent::Closed(err)) => return Err(err),
+                Ok(SseEvent::Endpoint(_)) | Ok(SseEvent::Message(_)) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err("SSE 会话已断开".into())
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
         let body = json!({
             "jsonrpc": "2.0",
             "id": id,

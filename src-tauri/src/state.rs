@@ -87,6 +87,14 @@ impl AppState {
         store::save_config(&self.paths, &self.config.read().unwrap())
     }
 
+    /// 标记为不可达：保留上次的服务名/版本，仅更新连接状态与错误
+    pub fn mark_disconnected(&self, error: Option<String>) {
+        let mut next = self.runtime.read().map(|r| r.clone()).unwrap_or_default();
+        next.connected = false;
+        next.last_error = error;
+        self.set_runtime(next);
+    }
+
     pub fn set_runtime(&self, status: RuntimeStatus) {
         if let Ok(mut guard) = self.runtime.write() {
             *guard = status.clone();

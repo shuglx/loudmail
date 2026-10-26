@@ -21,14 +21,14 @@ function makeMail() {
   if (kind === 0) {
     return {
       mail_id: `mock:${id}`,
-      sender: '"aqyyptsoc" <aqyyptsoc@dc.icbc.com.cn>',
+      sender: '"aqyyptsoc" <aqyyptsoc@dc.xxxx.com.cn>',
       subject: `【5级】SOC_安全告警_HIPS_10.9.${id % 200}.${id % 90}`,
       summary: `5级告警处置要求：15分钟内通知到应用维护部门。模拟时间 ${nowText()}`,
     };
   }
   return {
     mail_id: `mock:${id}`,
-    sender: '"DBA Alert" <dba-alert@dc.icbc.com.cn>',
+    sender: '"DBA Alert" <dba-alert@dc.xxxx.com.cn>',
     subject: `DB_ALERT_连接数异常_节点_${id % 20}`,
     summary: `数据库连接数超过阈值。模拟时间 ${nowText()}`,
   };

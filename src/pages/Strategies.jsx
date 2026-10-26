@@ -72,6 +72,8 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
 
   const save = async () => {
     if (!form.name.trim()) return setError('请填写策略名称');
+    if (!form.sender.trim()) return setError('请填写发件人邮箱');
+    if (!form.sender.includes('@')) return setError('发件人邮箱格式不正确');
     if (!form.keyword.trim()) return setError('请填写标题关键词');
     if (!form.soundId) return setError('请选择报警音频');
     setSaving(true);
@@ -383,22 +385,22 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
             type="text"
             maxLength={40}
             value={form.name}
-            placeholder="例如：SOC 安全告警"
+            placeholder="XXX告警"
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
         </div>
         <div className="field">
           <label>
-            发件人邮箱 <span className="opt">可选</span>
+            发件人邮箱 <span className="req">*</span>
           </label>
           <input
             type="text"
             value={form.sender}
-            placeholder="aqyyptsoc@dc.icbc.com.cn"
+            placeholder="abc@xxx.com.cn"
             onChange={(e) => setForm({ ...form, sender: e.target.value })}
           />
           <p className="hint">
-            精确匹配发件人地址，忽略显示名与大小写。留空表示匹配任意发件人，可能产生转发噪音。
+            模糊匹配发件人地址（忽略显示名与大小写）
           </p>
         </div>
         <div className="field">
@@ -410,7 +412,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
               type="text"
               maxLength={100}
               value={form.keyword}
-              placeholder="SOC_安全告警"
+              placeholder="XXX邮件"
               onChange={(e) => setForm({ ...form, keyword: e.target.value })}
             />
             <div className="segmented compact">
@@ -427,13 +429,13 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
             </div>
           </div>
           <p className="hint">
-            服务端按关键词检索，本地再按所选方式校验标题（忽略大小写，标题首尾空格不计）。
+            服务端按关键词检索，本地再按所选方式校验标题（忽略大小写和首尾空格）
           </p>
         </div>
         <div className="field field-inline">
           <div className="label">
             过滤回复和转发的邮件
-            <small>开启后，标题以“转发/回复 + 冒号”开头的邮件会被跳过</small>
+            <small>跳过标题以“转发/回复 + 冒号”开头的邮件</small>
           </div>
           <Switch
             checked={form.filterReplies}
@@ -485,12 +487,12 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
               </button>
             ))}
           </div>
-          <p className="hint">多次播放会依次进行，不会与其他策略的报警重叠。</p>
+          <p className="hint">多次播放会依次进行，不会与其他策略的报警重叠</p>
         </div>
         <div className="field field-inline">
           <div className="label">
             启用
-            <small>停用后不参与轮询</small>
+            <small>停用后不参与轮询匹配</small>
           </div>
           <Switch
             checked={form.enabled}

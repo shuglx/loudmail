@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { api } from './api';
 import watermarkUrl from '../icon-shadow.png';
+import Switch from './components/Switch';
 import Toast from './components/Toast';
 import Modal from './components/Modal';
 import History from './pages/History';
@@ -86,6 +87,8 @@ export default function App() {
     mock: false,
   });
   const [toast, setToast] = useState('');
+  // 全局播报开关（替代原来的托盘「暂停播报」）
+  const [paused, setPaused] = useState(false);
   const [ready, setReady] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [maximized, setMaximized] = useState(false);
@@ -96,6 +99,27 @@ export default function App() {
     previewing: false,
   });
   const toastTimer = useRef(null);
+
+  useEffect(() => {
+    api
+      .getBroadcastPaused()
+      .then((value) => setPaused(Boolean(value)))
+      .catch(() => {});
+  }, []);
+
+  const togglePaused = (next) => {
+    setPaused(next);
+    api
+      .setBroadcastPaused(next)
+      .then((value) => {
+        setPaused(Boolean(value));
+        flash(value ? '已暂停全部播报' : '已恢复播报');
+      })
+      .catch((e) => {
+        setPaused(!next);
+        flash(String(e));
+      });
+  };
 
   const flash = (message) => {
     setToast(message);
@@ -366,6 +390,16 @@ export default function App() {
                   ? `播报中 · 待播 ${playback.pending} 条`
                   : '暂无播报'}
               </span>
+            </div>
+            <div className={`broadcast-off${paused ? ' on' : ''}`}>
+              <span>暂停全部播报</span>
+              <Switch
+                shape="square"
+                variant="danger"
+                checked={paused}
+                onChange={togglePaused}
+                title="停用后停止轮询匹配与播报"
+              />
             </div>
             <div className="foot-row">
               <div className={`conn${status.connected ? '' : ' off'}`}>

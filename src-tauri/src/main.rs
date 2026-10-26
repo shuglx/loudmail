@@ -12,8 +12,6 @@ mod store;
 mod system;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use tauri::{
     AppHandle, CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
@@ -33,7 +31,6 @@ pub fn show_main(app: &AppHandle) {
 fn main() {
     let tray_menu = SystemTrayMenu::new()
         .add_item(CustomMenuItem::new("show", "显示主窗口"))
-        .add_item(CustomMenuItem::new("pause", "暂停播报"))
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(CustomMenuItem::new("quit", "退出"));
 
@@ -50,25 +47,6 @@ fn main() {
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
                 "show" => show_main(app),
-                "pause" => {
-                    if let Some(state) = app.try_state::<Arc<AppState>>() {
-                        let paused = !state.paused.load(Ordering::Relaxed);
-                        state.paused.store(paused, Ordering::Relaxed);
-                        if paused {
-                            // 暂停：停止当前播报并清空待播队列
-                            state.player.stop_all();
-                        } else {
-                            // 恢复：只播报今后新命中的邮件，跳过暂停期间积压的
-                            state.skip_backlog.store(true, Ordering::Relaxed);
-                        }
-                        let _ = app.tray_handle().get_item("pause").set_selected(paused);
-                        logfile::info(if paused {
-                            "[托盘] 已暂停播报，停止轮询匹配"
-                        } else {
-                            "[托盘] 已恢复播报，跳过暂停期间的积压邮件"
-                        });
-                    }
-                }
                 "quit" => {
                     logfile::info("[托盘] 用户退出应用");
                     app.exit(0);
@@ -166,6 +144,8 @@ fn main() {
             commands::settings::cmd_is_window_maximized,
             commands::settings::cmd_show_window,
             commands::settings::cmd_quit_app,
+            commands::settings::cmd_get_broadcast_paused,
+            commands::settings::cmd_set_broadcast_paused,
         ])
         .run(tauri::generate_context!())
         .expect("LoudMail 启动失败");

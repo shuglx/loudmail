@@ -17,13 +17,13 @@ impl MockSource {
             mails: vec![
                 MailItem {
                     mail_id: "mock:21598".into(),
-                    sender: "\"aqyyptsoc\" <aqyyptsoc@dc.icbc.com.cn>".into(),
+                    sender: "\"aqyyptsoc\" <aqyyptsoc@dc.xxxx.com.cn>".into(),
                     subject: format!("【5级】SOC_安全告警_HIPS_10.9.18.20"),
                     summary: format!("模拟告警邮件，生成时间 {now}"),
                 },
                 MailItem {
                     mail_id: "mock:21599".into(),
-                    sender: "\"DBA Alert\" <dba-alert@dc.icbc.com.cn>".into(),
+                    sender: "\"DBA Alert\" <dba-alert@dc.xxxx.com.cn>".into(),
                     subject: "DB_ALERT_核心库连接数超过阈值_10.9.32.14".into(),
                     summary: format!("模拟告警邮件，生成时间 {now}"),
                 },
@@ -67,17 +67,17 @@ impl MockSource {
         let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         let (sender, subject, summary) = match seq % 3 {
             0 => (
-                "\"aqyyptsoc\" <aqyyptsoc@dc.icbc.com.cn>",
+                "\"aqyyptsoc\" <aqyyptsoc@dc.xxxx.com.cn>",
                 format!("【5级】SOC_安全告警_HIPS_10.9.{}.{}", seq % 200, seq % 90),
                 format!("5级告警处置要求：15分钟内通知到应用维护部门。模拟时间 {now}"),
             ),
             1 => (
-                "\"DBA Alert\" <dba-alert@dc.icbc.com.cn>",
+                "\"DBA Alert\" <dba-alert@dc.xxxx.com.cn>",
                 format!("DB_ALERT_连接数异常_节点_{}", seq % 20),
                 format!("数据库连接数超过阈值。模拟时间 {now}"),
             ),
             _ => (
-                "\"Ops Center\" <ops@dc.icbc.com.cn>",
+                "\"Ops Center\" <ops@dc.xxxx.com.cn>",
                 format!("变更窗口_核心交换机升级_{}", seq % 50),
                 format!("变更窗口已开启。模拟时间 {now}"),
             ),

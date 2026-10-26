@@ -16,6 +16,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [limit, setLimit] = useState(3);
+  const [allTime, setAllTime] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState(null);
   const [appInfo, setAppInfo] = useState(null);
@@ -70,6 +71,8 @@ export default function Settings({ config, status, flash, onConfigChange }) {
       return;
     }
     if (host.trim() !== config.mcp.host || value !== config.mcp.port) {
+      // 端点变了，上一次的检测结果不再有效，先收起来
+      setTestResult(null);
       saveConfig({ mcp: { host: host.trim() || '127.0.0.1', port: value } });
     }
   };
@@ -80,7 +83,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
     setSearching(true);
     setSearchResult(null);
     try {
-      setSearchResult(await api.testSearch(value, limit));
+      setSearchResult(await api.testSearch(value, limit, allTime));
     } catch (e) {
       setSearchResult({ ok: false, ms: 0, request: '', response: '', error: String(e) });
     } finally {
@@ -229,7 +232,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                   {status.connected ? '已连接' : '未连接'}
                 </span>
                 <button className="btn btn-sm" onClick={testConnection} disabled={testing}>
-                  {testing ? '检测中…' : '测试连接'}
+                  {testing ? '检测中…' : '检测'}
                 </button>
                 <button
                   className="btn btn-sm"
@@ -276,14 +279,17 @@ export default function Settings({ config, status, flash, onConfigChange }) {
             </div>
             <div className="setting-row">
               <div className="label">
-                <b>模拟邮箱 [仅限开发人员调试]</b>
+                <b>
+                  模拟邮箱 <span className="dev-warn">[仅限开发人员调试]</span>
+                </b>
                 <small>不连接真实MCP而是模拟返回数据</small>
               </div>
               <Switch
                 checked={config.behavior.mock}
-                onChange={(checked) =>
-                  saveConfig({ behavior: { ...config.behavior, mock: checked } })
-                }
+                onChange={(checked) => {
+                  setTestResult(null);
+                  saveConfig({ behavior: { ...config.behavior, mock: checked } });
+                }}
               />
             </div>
           </section>
@@ -337,7 +343,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                         className="tts-input"
                         type="text"
                         value={ttsUrl}
-                        placeholder="ws://host:port/v1/audio/speech/stream"
+                        placeholder="ws://{ip}:{port}/v1/audio/speech/stream"
                         onChange={(e) => setTtsUrl(e.target.value)}
                         onBlur={() => saveTts({ intranetUrl: ttsUrl.trim() })}
                       />
@@ -483,6 +489,15 @@ export default function Settings({ config, status, flash, onConfigChange }) {
               value={keyword}
               placeholder="例如 SOC"
               onChange={(e) => setKeyword(e.target.value)}
+            />
+            <Select
+              className="debug-window"
+              value={allTime}
+              options={[
+                { value: false, label: '跟随设置' },
+                { value: true, label: '不限' },
+              ]}
+              onChange={setAllTime}
             />
             <Select
               className="debug-limit"

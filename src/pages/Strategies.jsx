@@ -179,14 +179,14 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       }
     };
 
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
+    // 用鼠标事件而不是 Pointer Events：麒麟自带 WebKitGTK 2.28 不支持 PointerEvent，
+    // 之前 onPointerDown 根本不触发，拖动完全没反应
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', finish);
     return () => {
       document.body.classList.remove('is-row-dragging');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', finish);
     };
   }, [dragging]);
 
@@ -292,7 +292,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                     <span
                       className="drag-handle"
                       title="拖动排序"
-                      onPointerDown={(e) => startDrag(e, strategy)}
+                      onMouseDown={(e) => startDrag(e, strategy)}
                     >
                       <GripIcon />
                     </span>

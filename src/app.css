@@ -1409,6 +1409,10 @@ code.keyword {
 }
 .eq i {
   width: 2px;
+  /* 固定高度 + scaleY 动画：height 动画每帧都要重排，老 WebKitGTK(麒麟) 上
+     会让主线程卡住（定时器不触发、界面点不动），换成纯合成的 transform */
+  height: 12px;
+  transform-origin: bottom;
   background: currentColor;
   border-radius: 1px;
   animation: eq 0.65s ease-in-out infinite alternate;
@@ -1421,10 +1425,10 @@ code.keyword {
 }
 @keyframes eq {
   from {
-    height: 3px;
+    transform: scaleY(0.25);
   }
   to {
-    height: 12px;
+    transform: scaleY(1);
   }
 }
 /* ---------- 设置 ---------- */
@@ -2080,7 +2084,11 @@ code.keyword {
 }
 .record-wave i {
   width: 3px;
-  height: 4px;
+  /* 同样改成固定高度 + scaleY，避免录音时的 height 动画拖死主线程。
+     用中心缩放，保持和原来「从中间长出来」的观感一致 */
+  height: 28px;
+  transform-origin: center;
+  transform: scaleY(0.18);
   background: var(--line-strong);
   border-radius: 2px;
   transition: background 0.2s;
@@ -2091,10 +2099,10 @@ code.keyword {
 }
 @keyframes wave {
   from {
-    height: 5px;
+    transform: scaleY(0.18);
   }
   to {
-    height: 28px;
+    transform: scaleY(1);
   }
 }
 .record-hint {

@@ -78,6 +78,19 @@ impl CoremailClient {
         Ok(client)
     }
 
+    /// SSE 会话是否仍然可用。
+    /// 服务端会按空闲把 SSE 连接回收，这是正常现象，调用方据此静默重建即可。
+    pub fn session_alive(&mut self) -> bool {
+        let Some(session) = self.sse.as_ref() else {
+            return false;
+        };
+        match session.rx.try_recv() {
+            Ok(SseEvent::Closed(_)) => false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+            _ => true,
+        }
+    }
+
     pub fn server_info(&self) -> Option<ServerInfo> {
         self.server_info.clone()
     }

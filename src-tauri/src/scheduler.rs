@@ -120,6 +120,17 @@ fn scan(
         return Ok(());
     }
 
+    // 服务端会按空闲回收 SSE 连接：这里主动检查，已回收就静默重建，
+    // 不走到「搜索失败」那条路径（那条会打 warn，正常情况下只会刷日志）
+    let alive = client
+        .as_mut()
+        .map(|c| c.session_alive())
+        .unwrap_or(false);
+    if client.is_some() && !alive {
+        logfile::info("[连接] SSE 会话已被服务端回收，重新建立");
+        *client = None;
+    }
+
     if client.is_none() {
         match CoremailClient::connect(&config.mcp.host, config.mcp.port) {
             Ok(c) => *client = Some(c),
@@ -149,9 +160,15 @@ fn scan(
         // SSE 长连接会被服务端按空闲回收：失败时重连一次再重试，
         // 避免一次瞬时断流就把状态打回"不可达"
         if result.is_err() {
-            logfile::warn(format!(
-                "MCP 搜索失败，重连后重试: {:?}",
-                result.as_ref().err()
+            // 会话在两次扫描之间被回收属于正常情况，重建后再试一次即可，
+            // 用 info 记录避免刷屏；真正的失败交给外层（连续两次才置为不可达）
+            logfile::info(format!(
+                "[连接] 请求失败，重建会话后重试: {}",
+                result
+                    .as_ref()
+                    .err()
+                    .map(String::as_str)
+                    .unwrap_or("未知错误")
             ));
             *client = None;
             match CoremailClient::connect(&config.mcp.host, config.mcp.port) {

@@ -29,8 +29,14 @@ pub fn show_main(app: &AppHandle) {
 }
 
 fn main() {
+    // 菜单里标注快捷键：Linux 上左键唤出不可用（appindicator 限制），右键菜单是主要入口
+    let show_label = if cfg!(target_os = "macos") {
+        "显示主窗口 (⌘⌥L)"
+    } else {
+        "显示主窗口 (Ctrl+Alt+L)"
+    };
     let tray_menu = SystemTrayMenu::new()
-        .add_item(CustomMenuItem::new("show", "显示主窗口"))
+        .add_item(CustomMenuItem::new("show", show_label))
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(CustomMenuItem::new("quit", "退出"));
 
@@ -95,6 +101,20 @@ fn main() {
                 tray = tray.with_menu_on_left_click(false);
             }
             tray.build(app)?;
+
+            // Linux 的托盘由 libappindicator 实现，左键点击不会派发到应用，
+            // 所以额外注册一个全局快捷键作为「呼出主界面」的可靠入口。
+            {
+                use tauri::GlobalShortcutManager;
+                let handle = app.handle();
+                match app
+                    .global_shortcut_manager()
+                    .register("CmdOrCtrl+Alt+L", move || show_main(&handle))
+                {
+                    Ok(_) => logfile::info("[托盘] 已注册全局快捷键 CmdOrCtrl+Alt+L（呼出主界面）"),
+                    Err(e) => logfile::warn(format!("注册全局快捷键失败: {e}")),
+                }
+            }
 
             if !std::env::args().any(|arg| arg == "--hidden") {
                 show_main(&app.handle());

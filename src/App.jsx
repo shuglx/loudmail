@@ -195,10 +195,11 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // 标题栏拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），系统自己跟手；
-  // 双击最大化已去掉：内置脚本在 macOS 上走 mouseup、在 Windows/Linux 上走
-  // mousedown（都是 detail===2），两处都要拦，否则 Linux 上还能双击最大化。
+  // 标题栏拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），系统自己跟手。
+  // 双击最大化只在 macOS 上禁用（内置脚本在 macOS 走 mouseup、在 Windows/Linux 走
+  // mousedown，都是 detail===2）；Windows / Linux 保留系统原生的双击最大化。
   useEffect(() => {
+    if (!/Mac/i.test(navigator.userAgent)) return undefined;
     const block = (event) => {
       if (event.button !== 0 || event.detail !== 2) return;
       const target = event.target;

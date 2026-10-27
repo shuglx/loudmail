@@ -17,6 +17,9 @@ mod x11;
 
 use std::path::PathBuf;
 
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{
     AppHandle, CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
     SystemTrayMenuItem, WindowEvent,
@@ -37,6 +40,10 @@ pub fn show_main(app: &AppHandle) {
         // (见 src/x11.rs);macOS / Windows 的 set_focus 本身就会前置,无需额外处理。
         #[cfg(target_os = "linux")]
         {
+            // show() 走 GTK show_all,会把 tao 预分配的空菜单栏一并显示——透明
+            // 无边框窗口下它就是顶部那条 22px 的透明带,每次唤出后都要补隐藏一次
+            hide_empty_gtk_menubar(app);
+
             let handle = app.clone();
             std::thread::spawn(move || {
                 for _ in 0..10 {
@@ -56,6 +63,53 @@ pub fn show_main(app: &AppHandle) {
             let _ = window.set_focus();
         }
     }
+}
+
+/// 隐藏 tao 在 GTK 窗口顶部预分配的空菜单栏（消除顶部 22px 的透明带）。
+///
+/// tao 为「之后注入菜单」在每个 GTK 窗口的竖直 GtkBox 顶部 pack 了一个空
+/// GtkMenuBar（tao window.rs：`window_box.pack_start(&menu_bar, ...)`），本应用
+/// 从不设置菜单，它仍占约 22px 高度；透明无边框窗口下 tao 还把它刷成透明，
+/// 表现就是窗口顶部永远有一条 22px 的透明带（内容比窗口矮 22px，透出底下的
+/// 窗口），最大化贴屏时最显眼。tao 的 show() 走 show_all，每次唤出都会让它
+/// 复活，所以每次 show_main 后都要补隐藏。macOS / Windows 后端没有这个结构，
+/// 无需处理。
+#[cfg(target_os = "linux")]
+fn hide_empty_gtk_menubar(app: &AppHandle) {
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    let app = app.clone();
+    // GTK 调用必须在主线程：托盘回调恰在主循环里，tauri 命令则在线程池里，
+    // 统一经 run_on_main_thread 派发
+    let _ = app.run_on_main_thread(move || {
+        use gtk::prelude::*;
+
+        let Some(window) = app.get_window("main") else {
+            return;
+        };
+        let Ok(gtk_window) = window.gtk_window() else {
+            if !LOGGED.swap(true, Ordering::SeqCst) {
+                logfile::warn("[窗口] 取 GTK 窗口句柄失败，顶部透明菜单栏未隐藏");
+            }
+            return;
+        };
+        // tao 的结构固定为 GtkWindow -> GtkBox(window_box) -> [空 GtkMenuBar, webview]
+        let mut hidden = false;
+        for top in gtk_window.children() {
+            let Ok(vbox) = top.downcast::<gtk::Box>() else {
+                continue;
+            };
+            for child in vbox.children() {
+                if child.is::<gtk::MenuBar>() {
+                    child.hide();
+                    hidden = true;
+                }
+            }
+        }
+        // 首次成功/失败各落一条日志即可，唤出是高频动作，别刷屏
+        if hidden && !LOGGED.swap(true, Ordering::SeqCst) {
+            logfile::info("[窗口] 已隐藏 tao 预分配的空 GTK 菜单栏（消除顶部 22px 透明带）");
+        }
+    });
 }
 
 fn main() {

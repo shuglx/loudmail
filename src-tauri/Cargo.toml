@@ -48,6 +48,9 @@ include_dir = "0.7"
 # X11 底层能力：按 EWMH 强制前置并聚焦主窗口（见 src/x11.rs，做法同 kylinpaste）
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = "0.13"
+# 直接操作 GTK 窗口：隐藏 tao 预分配的空菜单栏（见 main.rs hide_empty_gtk_menubar）。
+# 版本必须与 tao 0.16 的 gtk-rs 一致，否则类型不通
+gtk = "0.15"
 
 [features]
 default = ["custom-protocol"]

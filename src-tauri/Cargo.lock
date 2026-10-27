@@ -2490,6 +2490,7 @@ dependencies = [
  "cpal",
  "dirs 5.0.1",
  "edge-tts-rust",
+ "gtk",
  "hound",
  "include_dir",
  "once_cell",

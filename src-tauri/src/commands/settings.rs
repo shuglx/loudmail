@@ -371,7 +371,7 @@ pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
             .ok_or_else(|| "未找到当前显示器".to_string())?;
         *slot = Some((pos.x, pos.y, size.width, size.height));
         // 先改尺寸再改位置：部分 WM 会按"当前尺寸必须落在工作区内"来夹取位置，
-        // 反过来设置会被顶下来一条（正是顶部留缝的现象）
+        // 反过来设置时位置请求会被 WM 拒绝/改写
         window
             .set_size(tauri::Size::Physical(*monitor.size()))
             .map_err(|e| e.to_string())?;
@@ -387,27 +387,6 @@ pub fn cmd_toggle_maximize_window(app: AppHandle) -> Result<bool, String> {
             monitor.size().height
         ));
         let _ = window.set_focus();
-
-        // 诊断：WM 实际给到的几何。pos.y 若不为 0 说明被窗口管理器挪了；
-        // 若为 0 但界面仍有留白，则是 webview/内容层的问题。
-        // 注意：不能只在 Ok 分支打日志，读不到时也要落一行，否则无法区分是哪种情况。
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        let real_pos = match window.outer_position() {
-            Ok(p) => format!("({}, {})", p.x, p.y),
-            Err(e) => format!("err({e})"),
-        };
-        let real_size = match window.inner_size() {
-            Ok(s) => format!("{}x{}", s.width, s.height),
-            Err(e) => format!("err({e})"),
-        };
-        logfile::info(format!(
-            "[窗口] 几何核对 pos={real_pos} size={real_size} monitor=({}, {}) {}x{} scale={}",
-            monitor.position().x,
-            monitor.position().y,
-            monitor.size().width,
-            monitor.size().height,
-            window.scale_factor().unwrap_or(0.0)
-        ));
         return Ok(true);
     }
 

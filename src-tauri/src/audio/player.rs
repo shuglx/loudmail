@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -20,25 +20,34 @@ pub const MAX_QUEUE: usize = 50;
 const GAP_MS: u64 = 500;
 
 enum PlayerCommand {
-    /// 加入播报队列（count = 同一条语音连续播放次数）
-    Play { path: PathBuf, count: u8 },
+    /// 加入播报队列（count = 同一条语音连续播放次数，tag = 业务标识，用于去重/撤销）
+    Play {
+        path: PathBuf,
+        count: u8,
+        tag: Option<String>,
+    },
     /// 试听：使用独立 Sink，不影响播报队列
     Preview { path: PathBuf },
     /// 只停止试听
     StopPreview,
     /// 停止播报并清空队列（托盘暂停使用）
     StopAll,
+    /// 撤掉队列里尚未开始的某一批（人工确认后不再提醒）
+    Cancel { tag: String },
 }
 
 struct AlarmItem {
     path: PathBuf,
     count: u8,
+    tag: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct PlayerHandle {
     tx: Sender<PlayerCommand>,
     status: Arc<Mutex<PlaybackStatus>>,
+    /// 待播 + 正在播的 tag 集合，供调度器判断是否重复入队
+    in_flight: Arc<Mutex<HashSet<String>>>,
 }
 
 impl PlayerHandle {
@@ -46,6 +55,31 @@ impl PlayerHandle {
         let _ = self.tx.send(PlayerCommand::Play {
             path,
             count: count.max(1),
+            tag: None,
+        });
+    }
+
+    /// 带业务标识入队：同 tag 已在队列/播放中时自动忽略，避免重复堆积
+    pub fn play_tagged(&self, path: PathBuf, count: u8, tag: String) {
+        let _ = self.tx.send(PlayerCommand::Play {
+            path,
+            count: count.max(1),
+            tag: Some(tag),
+        });
+    }
+
+    /// 该 tag 是否还在队列中或正在播放
+    pub fn in_flight(&self, tag: &str) -> bool {
+        self.in_flight
+            .lock()
+            .map(|set| set.contains(tag))
+            .unwrap_or(false)
+    }
+
+    /// 撤掉队列里尚未开始的该 tag 播报（正在播的那一遍会播完）
+    pub fn cancel_tag(&self, tag: &str) {
+        let _ = self.tx.send(PlayerCommand::Cancel {
+            tag: tag.to_string(),
         });
     }
 
@@ -72,12 +106,23 @@ impl PlayerHandle {
 pub fn start(app: AppHandle) -> PlayerHandle {
     let (tx, rx) = mpsc::channel();
     let status = Arc::new(Mutex::new(PlaybackStatus::default()));
+    let in_flight = Arc::new(Mutex::new(HashSet::new()));
     let shared = status.clone();
-    thread::spawn(move || run(rx, app, shared));
-    PlayerHandle { tx, status }
+    let shared_tags = in_flight.clone();
+    thread::spawn(move || run(rx, app, shared, shared_tags));
+    PlayerHandle {
+        tx,
+        status,
+        in_flight,
+    }
 }
 
-fn run(rx: Receiver<PlayerCommand>, app: AppHandle, shared: Arc<Mutex<PlaybackStatus>>) {
+fn run(
+    rx: Receiver<PlayerCommand>,
+    app: AppHandle,
+    shared: Arc<Mutex<PlaybackStatus>>,
+    in_flight: Arc<Mutex<HashSet<String>>>,
+) {
     let (stream, handle) = match OutputStream::try_default() {
         Ok(v) => v,
         Err(e) => {
@@ -99,6 +144,7 @@ fn run(rx: Receiver<PlayerCommand>, app: AppHandle, shared: Arc<Mutex<PlaybackSt
 
     let mut queue: VecDeque<AlarmItem> = VecDeque::new();
     let mut playing = false;
+    let mut current_tag: Option<String> = None;
     let mut previewing = false;
     // 试听走独立 Sink，与播报互不影响
     let mut preview_sink: Option<Sink> = None;
@@ -113,11 +159,22 @@ fn run(rx: Receiver<PlayerCommand>, app: AppHandle, shared: Arc<Mutex<PlaybackSt
 
         if playing && sink.empty() {
             playing = false;
+            if let Some(tag) = current_tag.take() {
+                if let Ok(mut set) = in_flight.lock() {
+                    set.remove(&tag);
+                }
+            }
         }
         if !playing {
             if let Some(item) = queue.pop_front() {
                 if append_to_sink(&sink, &item.path, item.count) {
                     playing = true;
+                    current_tag = item.tag;
+                } else if let Some(tag) = item.tag {
+                    // 解码失败也释放 tag，否则这条记录永远不会再被重新入队
+                    if let Ok(mut set) = in_flight.lock() {
+                        set.remove(&tag);
+                    }
                 }
             }
         }
@@ -132,16 +189,28 @@ fn run(rx: Receiver<PlayerCommand>, app: AppHandle, shared: Arc<Mutex<PlaybackSt
         };
 
         match rx.recv_timeout(timeout) {
-            Ok(PlayerCommand::Play { path, count }) => {
-                if queue.len() >= MAX_QUEUE {
+            Ok(PlayerCommand::Play { path, count, tag }) => {
+                let duplicate = tag
+                    .as_ref()
+                    .map(|t| in_flight.lock().map(|set| set.contains(t)).unwrap_or(false))
+                    .unwrap_or(false);
+                if duplicate {
+                    // 同一条记录还在队列/播放中，本轮不重复入队
+                } else if queue.len() >= MAX_QUEUE {
                     logfile::warn(format!(
                         "播报队列已满（上限 {MAX_QUEUE} 条），已丢弃: {}",
                         path.display()
                     ));
                 } else {
+                    if let Some(t) = tag.as_ref() {
+                        if let Ok(mut set) = in_flight.lock() {
+                            set.insert(t.clone());
+                        }
+                    }
                     queue.push_back(AlarmItem {
                         path,
                         count: count.max(1),
+                        tag,
                     });
                 }
             }
@@ -166,10 +235,23 @@ fn run(rx: Receiver<PlayerCommand>, app: AppHandle, shared: Arc<Mutex<PlaybackSt
                 }
                 previewing = false;
             }
+            Ok(PlayerCommand::Cancel { tag }) => {
+                queue.retain(|item| item.tag.as_deref() != Some(tag.as_str()));
+                // 正在播的那一条不打断，播完再释放 tag
+                if current_tag.as_deref() != Some(tag.as_str()) {
+                    if let Ok(mut set) = in_flight.lock() {
+                        set.remove(&tag);
+                    }
+                }
+            }
             Ok(PlayerCommand::StopAll) => {
                 sink.stop();
                 queue.clear();
                 playing = false;
+                current_tag = None;
+                if let Ok(mut set) = in_flight.lock() {
+                    set.clear();
+                }
                 if let Some(s) = preview_sink.take() {
                     s.stop();
                 }

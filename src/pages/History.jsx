@@ -3,7 +3,7 @@ import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Select from '../components/Select';
-import { SearchIcon, ChevronRightIcon, TrashIcon } from '../icons';
+import { SearchIcon, TrashIcon } from '../icons';
 
 function pageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -21,12 +21,23 @@ function pageList(current, total) {
   return out;
 }
 
+function confirmLabel(record) {
+  if (!record.requireConfirm) return '无需确认';
+  return record.confirmed ? '已确认' : '待确认';
+}
+
+function confirmDetail(record) {
+  const state = confirmLabel(record);
+  return record.confirmed && record.confirmedAt ? `${state} · ${record.confirmedAt}` : state;
+}
+
 export default function History({ history, flash, onCleared }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
+  // 只存 id，记录本身从 history 里取，确认/重复播报后详情自动跟着更新
+  const [selectedId, setSelectedId] = useState(null);
   const [clearOpen, setClearOpen] = useState(false);
 
   const strategyNames = useMemo(
@@ -53,6 +64,7 @@ export default function History({ history, flash, onCleared }) {
   const items = filtered.slice(start, start + pageSize);
   const from = total === 0 ? 0 : start + 1;
   const to = Math.min(start + pageSize, total);
+  const selected = history.find((record) => record.id === selectedId) || null;
 
   const setQueryAndReset = (value) => {
     setQuery(value);
@@ -70,10 +82,22 @@ export default function History({ history, flash, onCleared }) {
   const clear = async () => {
     setClearOpen(false);
     try {
-      await api.clearHistory();
+      const kept = await api.clearHistory();
       setPage(1);
       await onCleared();
-      flash('播报记录已清空');
+      flash(kept ? `已清空，保留 ${kept} 条待确认记录` : '播报记录已清空');
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
+  const confirm = async (event, record) => {
+    // 不要冒泡到整行，否则会顺带打开详情弹窗
+    event.stopPropagation();
+    if (record.confirmed) return;
+    try {
+      await api.confirmHistory(record.id);
+      flash('已确认收到');
     } catch (e) {
       flash(String(e));
     }
@@ -118,7 +142,7 @@ export default function History({ history, flash, onCleared }) {
           ]}
           onChange={setPageSizeAndReset}
         />
-        <span className="toolbar-note">滚动保留最新 500 条</span>
+        <span className="toolbar-note">滚动保留最新 1000 条，待确认记录不受限</span>
       </div>
 
       {total > 0 ? (
@@ -156,6 +180,13 @@ export default function History({ history, flash, onCleared }) {
       ) : null}
 
       <div className="panel">
+        <div className="table-head history-head">
+          <span>命中时间</span>
+          <span>命中策略</span>
+          <span>邮件信息</span>
+          <span>人工确认</span>
+          <span>播报语音</span>
+        </div>
         {total === 0 ? (
           <div className="empty">
             <div className="empty-ico">◷</div>
@@ -166,10 +197,22 @@ export default function History({ history, flash, onCleared }) {
           </div>
         ) : (
           items.map((record) => (
-            <button
-              className="history-row"
+            <div
+              className={`history-row${
+                record.rebroadcastCount > 0 && !record.confirmed ? ' overdue' : ''
+              }`}
               key={record.id}
-              onClick={() => setSelected(record)}
+              role="button"
+              tabIndex={0}
+              onClick={() => setSelectedId(record.id)}
+              onKeyDown={(event) => {
+                // 焦点在「确认」按钮上时交给按钮自己处理
+                if (event.target !== event.currentTarget) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedId(record.id);
+                }
+              }}
             >
               <span className="history-grid">
                 <span className="history-time">{record.time.slice(5, 16)}</span>
@@ -177,19 +220,47 @@ export default function History({ history, flash, onCleared }) {
                   {record.strategyName}
                 </span>
                 <span className="history-main">
-                  <b title={record.subject}>{record.subject}</b>
+                  <b
+                    title={
+                      record.rebroadcastCount > 0
+                        ? `${record.subject}（已重复播报 ${record.rebroadcastCount} 次，未在第一时间确认）`
+                        : record.subject
+                    }
+                  >
+                    {record.subject}
+                  </b>
                   <span>{record.sender}</span>
                 </span>
+                <span className="history-confirm">
+                  {record.requireConfirm && !record.confirmed ? (
+                    <button
+                      className="confirm-btn"
+                      type="button"
+                      title="确认已收到，不再重复播报"
+                      onClick={(event) => confirm(event, record)}
+                    >
+                      确认
+                    </button>
+                  ) : record.requireConfirm ? (
+                    <button className="confirm-btn confirmed" type="button" disabled>
+                      已确认
+                    </button>
+                  ) : (
+                    <button className="confirm-btn done" type="button" disabled>
+                      无需确认
+                    </button>
+                  )}
+                </span>
                 <span className="history-side">
-                  <span className="tag">
+                  <span
+                    className="tag"
+                    title={`${record.soundName} × ${record.playCount}`}
+                  >
                     {record.soundName} × {record.playCount}
-                  </span>
-                  <span className="chev">
-                    <ChevronRightIcon />
                   </span>
                 </span>
               </span>
-            </button>
+            </div>
           ))
         )}
       </div>
@@ -197,9 +268,9 @@ export default function History({ history, flash, onCleared }) {
       <Modal
         open={Boolean(selected)}
         title="播报详情"
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         footer={
-          <button className="btn" onClick={() => setSelected(null)}>
+          <button className="btn" onClick={() => setSelectedId(null)}>
             关闭
           </button>
         }
@@ -213,6 +284,15 @@ export default function History({ history, flash, onCleared }) {
               <Detail k="邮件标题" v={selected.subject} />
               <Detail k="播放语音" v={selected.soundName} />
               <Detail k="播报次数" v={`${selected.playCount} 次`} />
+              <Detail k="确认状态" v={confirmDetail(selected)} />
+              {selected.rebroadcastCount > 0 ? (
+                <Detail
+                  k="重复播报"
+                  v={`${selected.rebroadcastCount} 次${
+                    selected.lastBroadcastAt ? ` · 最近 ${selected.lastBroadcastAt}` : ''
+                  }`}
+                />
+              ) : null}
               <Detail k="邮件 ID" v={selected.mailId} mono />
               <div className="detail-item detail-summary">
                 <span className="k">邮件摘要</span>
@@ -230,8 +310,8 @@ export default function History({ history, flash, onCleared }) {
 
       <ConfirmDialog
         open={clearOpen}
-        title="清空全部播报记录？"
-        description="清空后不影响策略游标，已播报的邮件不会被重复播报。"
+        title="清空播报记录？"
+        description="只清理「无需确认」和「已确认」的记录；待确认的记录会保留，必须人工确认后才会被清理或滚动淘汰。清空后不影响策略游标，已播报的邮件不会重复播报。"
         confirmText="清空"
         onCancel={() => setClearOpen(false)}
         onConfirm={clear}

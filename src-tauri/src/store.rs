@@ -188,17 +188,35 @@ pub fn save_strategies(paths: &AppPaths, items: &[Strategy]) -> Result<(), Strin
     )
 }
 
+/// 播报记录滚动上限；待确认（开启人工确认且未确认）的记录不受该上限约束
+pub const HISTORY_LIMIT: usize = 1000;
+
+/// 超出上限时从尾部淘汰「无需确认 / 已确认」的记录，待确认的一律保留
+pub fn cap_history(items: &mut Vec<HistoryRecord>) {
+    if items.len() <= HISTORY_LIMIT {
+        return;
+    }
+    let mut index = items.len();
+    while items.len() > HISTORY_LIMIT && index > 0 {
+        index -= 1;
+        let pending = items[index].require_confirm && !items[index].confirmed;
+        if !pending {
+            items.remove(index);
+        }
+    }
+}
+
 pub fn load_history(paths: &AppPaths) -> Vec<HistoryRecord> {
     let mut items = read_json::<HistoryFile>(&paths.history)
         .map(|f| f.items)
         .unwrap_or_default();
-    items.truncate(500);
+    cap_history(&mut items);
     items
 }
 
 pub fn save_history(paths: &AppPaths, items: &[HistoryRecord]) -> Result<(), String> {
     let mut capped = items.to_vec();
-    capped.truncate(500);
+    cap_history(&mut capped);
     write_json(
         &paths.history,
         &HistoryFile {
@@ -406,4 +424,77 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cap_history, HistoryRecord, HISTORY_LIMIT};
+
+    fn record(id: usize, require_confirm: bool, confirmed: bool) -> HistoryRecord {
+        HistoryRecord {
+            id: format!("his_{id}"),
+            time: "2026-10-01 10:00:00".into(),
+            strategy_id: "stg_1".into(),
+            strategy_name: "SOC".into(),
+            mail_id: format!("mock:{id}"),
+            sender: "a@b.com".into(),
+            subject: format!("告警 {id}"),
+            summary: String::new(),
+            sound_name: "普通告警音".into(),
+            play_count: 1,
+            require_confirm,
+            confirmed,
+            confirmed_at: None,
+            sound_id: None,
+            rebroadcast_count: 0,
+            last_broadcast_at: None,
+        }
+    }
+
+    #[test]
+    fn cap_removes_oldest_handled_records() {
+        let mut items: Vec<HistoryRecord> = (0..HISTORY_LIMIT + 1)
+            .map(|i| record(i, false, false))
+            .collect();
+        cap_history(&mut items);
+        assert_eq!(items.len(), HISTORY_LIMIT);
+        // 列表是新→旧，尾部（最老的一条）被淘汰
+        assert_eq!(items.first().unwrap().id, "his_0");
+        assert_eq!(items.last().unwrap().id, format!("his_{}", HISTORY_LIMIT - 1));
+    }
+
+    #[test]
+    fn cap_keeps_pending_records_even_at_the_tail() {
+        let mut items: Vec<HistoryRecord> = (0..HISTORY_LIMIT + 1)
+            .map(|i| record(i, false, false))
+            .collect();
+        // 最老的一条仍是待确认：不能被滚动上限挤掉
+        *items.last_mut().unwrap() = record(HISTORY_LIMIT, true, false);
+        cap_history(&mut items);
+        assert_eq!(items.len(), HISTORY_LIMIT);
+        assert_eq!(
+            items.last().unwrap().id,
+            format!("his_{HISTORY_LIMIT}")
+        );
+        // 被淘汰的是倒数第二条（无需确认）
+        assert!(items.iter().all(|item| item.id != format!("his_{}", HISTORY_LIMIT - 1)));
+    }
+
+    #[test]
+    fn cap_can_exceed_limit_when_everything_is_pending() {
+        let mut items: Vec<HistoryRecord> = (0..HISTORY_LIMIT + 5)
+            .map(|i| record(i, true, false))
+            .collect();
+        cap_history(&mut items);
+        assert_eq!(items.len(), HISTORY_LIMIT + 5);
+    }
+
+    #[test]
+    fn confirmed_pending_record_becomes_evictable() {
+        let mut items: Vec<HistoryRecord> = (0..HISTORY_LIMIT + 1)
+            .map(|i| record(i, true, true))
+            .collect();
+        cap_history(&mut items);
+        assert_eq!(items.len(), HISTORY_LIMIT);
+    }
 }

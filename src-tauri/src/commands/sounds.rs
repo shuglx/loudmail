@@ -301,7 +301,7 @@ pub fn cmd_get_playback_status(state: State<'_, Arc<AppState>>) -> PlaybackStatu
     state.player.status()
 }
 
-/// 模拟模式下向播报队列插入 5 条随机内置语音，便于联调播报队列
+/// 模拟模式下向播报队列插入 3 条随机内置语音，便于联调播报队列
 #[tauri::command]
 pub fn cmd_test_playback(state: State<'_, Arc<AppState>>) -> Result<usize, String> {
     let mock = state
@@ -333,7 +333,7 @@ pub fn cmd_test_playback(state: State<'_, Arc<AppState>>) -> Result<usize, Strin
         | 1;
 
     let mut names: Vec<String> = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..3 {
         seed ^= seed << 13;
         seed ^= seed >> 7;
         seed ^= seed << 17;

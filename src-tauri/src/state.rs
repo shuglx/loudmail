@@ -76,7 +76,10 @@ impl AppState {
     }
 
     pub fn save_history(&self) -> Result<(), String> {
-        store::save_history(&self.paths, &self.history.read().unwrap())
+        let mut history = self.history.write().map_err(|e| e.to_string())?;
+        // 这里再兜一次：某条记录被确认后，就该按滚动上限淘汰了
+        store::cap_history(&mut history);
+        store::save_history(&self.paths, &history)
     }
 
     pub fn save_sounds(&self) -> Result<(), String> {
@@ -104,6 +107,19 @@ impl AppState {
 
     pub fn emit_history(&self, record: &HistoryRecord) {
         let _ = self.app.emit_all("history://new", record.clone());
+    }
+
+    /// 记录被修改（人工确认）：前端原位替换该条
+    pub fn emit_history_updated(&self, record: &HistoryRecord) {
+        let _ = self.app.emit_all("history://updated", record.clone());
+    }
+
+    /// 未确认记录被重复播报：前端按数组顺序把它们移到列表最前
+    pub fn emit_history_rebroadcast(&self, records: &[HistoryRecord]) {
+        if records.is_empty() {
+            return;
+        }
+        let _ = self.app.emit_all("history://rebroadcast", records.to_vec());
     }
 
     pub fn sound(&self, id: &str) -> Option<SoundItem> {

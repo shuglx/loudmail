@@ -28,6 +28,7 @@ const emptyForm = {
   keyword: '',
   matchMode: 'contains',
   filterReplies: true,
+  requireConfirm: false,
   soundId: '',
   playCount: 1,
   enabled: true,
@@ -62,6 +63,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       keyword: strategy.keyword,
       matchMode: strategy.matchMode || 'contains',
       filterReplies: strategy.filterReplies !== false,
+      requireConfirm: Boolean(strategy.requireConfirm),
       soundId: strategy.soundId || '',
       playCount: strategy.playCount || 1,
       enabled: strategy.enabled,
@@ -75,7 +77,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
     if (!form.sender.trim()) return setError('请填写发件人邮箱');
     if (!form.sender.includes('@')) return setError('发件人邮箱格式不正确');
     if (!form.keyword.trim()) return setError('请填写标题关键词');
-    if (!form.soundId) return setError('请选择报警音频');
+    if (!form.soundId) return setError('请选择播报语音');
     setSaving(true);
     setError('');
     try {
@@ -99,6 +101,20 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       await api.setStrategyEnabled(strategy.id, checked);
       await onRefresh();
       flash(`「${strategy.name}」已${checked ? '启用' : '停用'}`);
+    } catch (e) {
+      flash(String(e));
+    }
+  };
+
+  const toggleConfirm = async (strategy, checked) => {
+    try {
+      await api.setStrategyRequireConfirm(strategy.id, checked);
+      await onRefresh();
+      flash(
+        checked
+          ? `「${strategy.name}」已开启人工确认，未确认会重复播报`
+          : `「${strategy.name}」已关闭人工确认`
+      );
     } catch (e) {
       flash(String(e));
     }
@@ -250,7 +266,9 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       </div>
 
       <div className="strategy-meta">
-        <span className="strategy-note">根据策略顺序从上至下匹配，同一封邮件仅会命中和播报一次</span>
+        <span className="strategy-note">
+          根据策略顺序从上至下匹配，同一封邮件仅命中一次；开启「人工确认」的策略在确认前会每轮重复播报
+        </span>
         <span className="muted strategy-count">
           {strategies.length} 条策略 · {enabledCount} 条启用
         </span>
@@ -259,11 +277,12 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       <div className="panel">
         <div className="table-head strategy-grid">
           <span />
-          <span>策略名</span>
-          <span>发件人</span>
+          <span>策略名称</span>
+          <span>发件人邮箱</span>
           <span>标题关键词</span>
-          <span>语音</span>
-          <span>启用</span>
+          <span>播报语音</span>
+          <span>需人工确认</span>
+          <span>策略启用</span>
           <span />
         </div>
         <div>
@@ -322,6 +341,17 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                     <span className={`sound-chip${sound ? '' : ' missing'}`}>
                       {sound ? sound.name : '缺少语音'}
                     </span>
+                  </div>
+                  <div>
+                    <Switch
+                      checked={Boolean(strategy.requireConfirm)}
+                      onChange={(checked) => toggleConfirm(strategy, checked)}
+                      title={
+                        strategy.requireConfirm
+                          ? '关闭人工确认（只影响后续命中的记录）'
+                          : '开启人工确认（未确认会重复播报）'
+                      }
+                    />
                   </div>
                   <div>
                     <Switch
@@ -444,7 +474,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
         </div>
         <div className="field">
           <label>
-            报警音频 <span className="req">*</span>
+            播报语音 <span className="req">*</span>
           </label>
           <div className="field-row">
             <Select
@@ -492,7 +522,19 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
         </div>
         <div className="field field-inline">
           <div className="label">
-            启用
+            需人工确认
+            <small>
+              命中后需在播报记录中确认收到，未确认时每轮轮询重复播报
+            </small>
+          </div>
+          <Switch
+            checked={form.requireConfirm}
+            onChange={(checked) => setForm({ ...form, requireConfirm: checked })}
+          />
+        </div>
+        <div className="field field-inline">
+          <div className="label">
+            策略启用
             <small>停用后不参与轮询匹配</small>
           </div>
           <Switch

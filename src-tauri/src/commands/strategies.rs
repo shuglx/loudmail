@@ -61,7 +61,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
     let match_mode = normalize_match_mode(&input.match_mode);
     let sound_id = input.sound_id.clone().filter(|s| !s.is_empty());
     if sound_id.is_none() {
-        return Err("请选择报警音频".into());
+        return Err("请选择播报语音".into());
     }
     if state.sound(sound_id.as_deref().unwrap_or_default()).is_none() {
         return Err("所选语音不存在，请先在语音库添加".into());
@@ -72,6 +72,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
         keyword,
         match_mode,
         filter_replies: input.filter_replies,
+        require_confirm: input.require_confirm,
         sound_id,
         play_count: input.play_count.clamp(1, 3),
         enabled: input.enabled,
@@ -89,6 +90,7 @@ fn build_export(state: &AppState) -> Result<StrategyExportFile, String> {
             keyword: item.keyword.clone(),
             match_mode: item.match_mode.clone(),
             filter_replies: item.filter_replies,
+            require_confirm: item.require_confirm,
             sound_id: item.sound_id.clone(),
             sound_name: item
                 .sound_id
@@ -229,6 +231,7 @@ pub fn cmd_import_strategies(
                 target.keyword = keyword;
                 target.match_mode = match_mode;
                 target.filter_replies = item.filter_replies;
+                target.require_confirm = item.require_confirm;
                 target.sound_id = sound_id;
                 target.play_count = play_count;
                 target.updated_at = store::now_iso();
@@ -248,6 +251,7 @@ pub fn cmd_import_strategies(
                     keyword,
                     match_mode,
                     filter_replies: item.filter_replies,
+                    require_confirm: item.require_confirm,
                     sound_id,
                     play_count,
                     cursor_seq: None,
@@ -295,6 +299,7 @@ pub fn cmd_create_strategy(
         keyword: input.keyword,
         match_mode: input.match_mode,
         filter_replies: input.filter_replies,
+        require_confirm: input.require_confirm,
         sound_id: input.sound_id,
         play_count: input.play_count,
         cursor_seq: None,
@@ -332,6 +337,7 @@ pub fn cmd_update_strategy(
     item.keyword = input.keyword;
     item.match_mode = input.match_mode;
     item.filter_replies = input.filter_replies;
+    item.require_confirm = input.require_confirm;
     item.sound_id = input.sound_id;
     item.play_count = input.play_count;
     item.updated_at = store::now_iso();
@@ -368,6 +374,26 @@ pub fn cmd_set_strategy_enabled(
         .find(|s| s.id == id)
     {
         item.enabled = enabled;
+        item.updated_at = store::now_iso();
+    }
+    state.save_strategies()
+}
+
+/// 列表内直接切换「人工确认」：只改这一个字段，不动游标、不做完整校验
+#[tauri::command]
+pub fn cmd_set_strategy_require_confirm(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+    require_confirm: bool,
+) -> Result<(), String> {
+    if let Some(item) = state
+        .strategies
+        .write()
+        .map_err(|e| e.to_string())?
+        .iter_mut()
+        .find(|s| s.id == id)
+    {
+        item.require_confirm = require_confirm;
         item.updated_at = store::now_iso();
     }
     state.save_strategies()

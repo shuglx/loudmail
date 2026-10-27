@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -6,7 +7,7 @@ use std::time::{Duration, Instant};
 use chrono::{Duration as ChronoDuration, Local};
 
 use crate::logfile;
-use crate::mcp::mock::MockSource;
+use crate::mcp::mock::{self, MockSource};
 use crate::mcp::CoremailClient;
 use crate::models::*;
 use crate::state::AppState;
@@ -24,6 +25,8 @@ pub fn start(state: Arc<AppState>) {
         let mut last_scan = Instant::now()
             .checked_sub(Duration::from_secs(3600))
             .unwrap_or_else(Instant::now);
+        // 语音已被删除/文件丢失的记录只提醒一次，避免每轮刷日志
+        let mut warned_missing: HashSet<String> = HashSet::new();
 
         loop {
             thread::sleep(Duration::from_millis(500));
@@ -58,6 +61,8 @@ pub fn start(state: Arc<AppState>) {
                 continue;
             }
             last_scan = Instant::now();
+            // 未确认的「人工确认」记录每轮都重新提醒，与邮箱连接状态无关
+            rebroadcast_pending(&state, &mut warned_missing);
             match scan(&state, &config, &mut client, &mut mock) {
                 Ok(()) => {
                     failures = 0;
@@ -102,7 +107,23 @@ fn scan(
     let skip_backlog = state.skip_backlog.swap(false, Ordering::Relaxed);
 
     if config.behavior.mock {
-        let source = mock.get_or_insert_with(MockSource::new);
+        // 模拟邮件的序号必须接在现有游标之后：游标是持久化的，而 mock 每次启动
+        // 都从 BASE_SEQ 重新计数，序号一旦落后于游标，新邮件会被当成旧邮件全部跳过
+        let start_seq = state
+            .strategies
+            .read()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.cursor_seq)
+                    .max()
+                    .unwrap_or(0)
+                    + 1
+            })
+            .unwrap_or(mock::BASE_SEQ);
+        let source = mock.get_or_insert_with(|| MockSource::new(start_seq));
+        // 每轮轮询生成一封新的 SOC 告警
+        source.tick();
         state.set_runtime(RuntimeStatus {
             connected: true,
             server_name: Some("Mock MailBox".into()),
@@ -289,10 +310,14 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         }
 
         let play_count = strategy.play_count.clamp(1, 3);
-        state.player.play(path.clone(), play_count);
+        let record_id = store::new_id("his");
+        // 带记录 id 入队：这条还在播时，下一轮的重复提醒会被自动挡掉
+        state
+            .player
+            .play_tagged(path.clone(), play_count, record_id.clone());
 
         let record = HistoryRecord {
-            id: store::new_id("his"),
+            id: record_id,
             time: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             strategy_id: strategy.id.clone(),
             strategy_name: strategy.name.clone(),
@@ -302,10 +327,18 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
             summary: mail.summary.clone(),
             sound_name: sound.name.clone(),
             play_count,
+            // 快照策略当前的人工确认设置：之后改策略不影响已经命中的记录
+            require_confirm: strategy.require_confirm,
+            confirmed: false,
+            confirmed_at: None,
+            sound_id: Some(sound.id.clone()),
+            rebroadcast_count: 0,
+            last_broadcast_at: None,
         };
         if let Ok(mut history) = state.history.write() {
             history.insert(0, record.clone());
-            history.truncate(500);
+            // 淘汰尾部记录时跳过待确认的，避免关键告警被滚动上限挤掉
+            store::cap_history(&mut history);
         }
         if let Ok(mut seen) = state.seen.lock() {
             seen.insert(mail_id);
@@ -319,6 +352,104 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
     }
 
     set_cursor(state, &strategy.id, max_seq.max(cursor));
+}
+
+/// 未确认的「人工确认」记录：每轮轮询重新入队播报，并把记录移到列表最前。
+/// 完全按记录自身快照判断，与策略当前是否启用/是否被删除无关。
+fn rebroadcast_pending(state: &AppState, warned_missing: &mut HashSet<String>) {
+    let mut pending: Vec<HistoryRecord> = match state.history.read() {
+        Ok(history) => history
+            .iter()
+            .filter(|item| item.require_confirm && !item.confirmed)
+            .cloned()
+            .collect(),
+        Err(_) => return,
+    };
+    if pending.is_empty() {
+        return;
+    }
+    // 列表里是「最近播报优先」，重复提醒按首次命中时间从早到晚排队
+    pending.sort_by(|a, b| a.time.cmp(&b.time));
+
+    let mut queued: Vec<String> = Vec::new();
+    for record in &pending {
+        // 上一条重播还没播完（或还在队列里），本轮跳过，避免堆在队列里
+        if state.player.in_flight(&record.id) {
+            continue;
+        }
+        let sound = record.sound_id.as_ref().and_then(|id| state.sound(id));
+        let Some(sound) = sound else {
+            if warned_missing.insert(record.id.clone()) {
+                logfile::warn(format!(
+                    "待确认记录缺少语音，跳过重复播报: {} ({})",
+                    record.subject, record.id
+                ));
+            }
+            continue;
+        };
+        let path = state.paths.sounds_dir.join(&sound.file);
+        if !path.exists() {
+            if warned_missing.insert(record.id.clone()) {
+                logfile::error(format!("语音文件不存在，跳过重复播报: {}", path.display()));
+            }
+            continue;
+        }
+        state
+            .player
+            .play_tagged(path, record.play_count.clamp(1, 3), record.id.clone());
+        queued.push(record.id.clone());
+    }
+
+    if queued.is_empty() {
+        return;
+    }
+
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut updated: Vec<HistoryRecord> = Vec::new();
+    {
+        let Ok(mut history) = state.history.write() else {
+            return;
+        };
+        let mut moving: Vec<HistoryRecord> = Vec::new();
+        for id in &queued {
+            if let Some(index) = history.iter().position(|item| &item.id == id) {
+                let item = history.remove(index);
+                if item.confirmed {
+                    // 入队之后被人工确认了：保持原位置，不再提醒
+                    history.insert(index, item);
+                } else {
+                    moving.push(item);
+                }
+            }
+        }
+        for mut item in moving {
+            item.rebroadcast_count = item.rebroadcast_count.saturating_add(1);
+            item.last_broadcast_at = Some(now.clone());
+            updated.push(item);
+        }
+        // 倒序插入，保证这批里最早的仍然排在最前
+        for item in updated.iter().rev() {
+            history.insert(0, item.clone());
+        }
+        store::cap_history(&mut history);
+    }
+
+    if updated.is_empty() {
+        return;
+    }
+    if let Err(e) = state.save_history() {
+        logfile::error(format!("保存播报记录失败: {e}"));
+    }
+    state.emit_history_rebroadcast(&updated);
+    logfile::info(format!(
+        "重复播报 {} 条未确认记录: {}",
+        updated.len(),
+        updated
+            .iter()
+            .map(|item| item.subject.as_str())
+            .collect::<Vec<_>>()
+            .join(" / ")
+    ));
 }
 
 fn set_cursor(state: &AppState, strategy_id: &str, seq: u64) {

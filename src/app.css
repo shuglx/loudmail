@@ -525,6 +525,8 @@ button:focus {
 }
 .strategy-count {
   font-size: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .toolbar-note {
   margin-left: auto;
@@ -687,9 +689,9 @@ button:focus {
   grid-template-columns: 16px minmax(90px, 1.05fr) minmax(125px, 1.45fr) minmax(
       95px,
       1.15fr
-    ) minmax(95px, 0.95fr) 42px 62px;
+    ) minmax(95px, 0.95fr) 66px 56px 62px;
   gap: 10px;
-  min-width: 640px;
+  min-width: 700px;
 }
 .strategy-grid > * {
   min-width: 0;
@@ -1131,18 +1133,26 @@ code.keyword {
   text-align: left;
   padding: 0;
   background: none;
-  border: none;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background 0.12s;
 }
-.history-grid {
-  display: grid;
-  grid-template-columns: minmax(84px, 1fr) minmax(96px, 1fr) minmax(0, 3fr) minmax(
-      120px,
+/* 表头与行共用同一套列宽（1:1:2:1:1），保证对齐 */
+.history-grid,
+.history-head {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) minmax(
+      0,
       1fr
     );
   gap: 14px;
+}
+/* 表头与单元格内容统一居中 */
+.history-head,
+.history-grid {
+  text-align: center;
+}
+.history-grid {
+  display: grid;
   align-items: center;
   width: 100%;
   padding: 11px 16px;
@@ -1153,6 +1163,10 @@ code.keyword {
   border-bottom: none;
 }
 .history-row:hover {
+  background: var(--surface-3);
+}
+.history-row:focus-visible {
+  outline: none;
   background: var(--surface-3);
 }
 .history-time {
@@ -1189,19 +1203,69 @@ code.keyword {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 错过第一时间确认（已重复播报且仍未确认）：时间、策略、标题、发件人一起标红 */
+.history-row.overdue .history-time,
+.history-row.overdue .history-strategy,
+.history-row.overdue .history-main b,
+.history-row.overdue .history-main span {
+  color: var(--red);
+}
+.history-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.confirm-btn {
+  height: 23px;
+  padding: 0 10px;
+  border: 1px solid #f0cfa4;
+  border-radius: 6px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.confirm-btn:hover {
+  background: #fff4de;
+  border-color: #e6bd8a;
+}
+/* 无需确认：灰色不可点击 */
+.confirm-btn.done,
+.confirm-btn[disabled] {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted-2);
+  cursor: default;
+}
+/* 已确认：绿色静态标签 */
+.confirm-btn.confirmed,
+.confirm-btn.confirmed[disabled] {
+  border-color: #b9e3d0;
+  background: var(--green-bg);
+  color: var(--green);
+  cursor: default;
+}
 .history-side {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   min-width: 0;
+  /* 语音名过长时在列内截断，避免挤到「人工确认」列 */
+  overflow: hidden;
 }
-.history-side > * + * {
-  margin-left: 8px;
-}
-.history-side .chev {
-  color: var(--muted-2);
-  display: flex;
-  align-items: center;
+/* 列宽按 1:1:2:1:1 分配后语音列可能较窄：这里改成块级裁切，
+   超长语音名显示省略号而不是溢出压住确认按钮 */
+.history-side .tag {
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 19px;
+  line-height: 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pager {
   display: flex;
@@ -1801,15 +1865,16 @@ code.keyword {
   font-weight: 600;
   color: var(--muted-2);
   letter-spacing: 0.2px;
-  padding: 0 10px 8px;
-  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  /* 整表全边框 */
+  border: 1px solid var(--line);
 }
 .help-table th:first-child {
   width: 92px;
 }
 .help-table td {
   padding: 10px;
-  border-bottom: 1px solid var(--line);
+  border: 1px solid var(--line);
   vertical-align: middle;
   text-align: center;
   color: var(--muted);
@@ -1823,9 +1888,6 @@ code.keyword {
 /* 功能说明列左对齐，仅表头居中 */
 .help-table td:nth-child(2) {
   text-align: left;
-}
-.help-table tbody tr:last-child td {
-  border-bottom: none;
 }
 .help-table tbody tr:hover td {
   background: var(--surface-3);
@@ -2807,6 +2869,25 @@ button.ringtone-item {
 }
 :root[data-theme='dark'] .row-actions button.danger:hover {
   border-color: rgba(255, 123, 114, 0.6);
+}
+
+/* 人工确认按钮 */
+:root[data-theme='dark'] .confirm-btn {
+  border-color: #5c4720;
+}
+:root[data-theme='dark'] .confirm-btn:hover {
+  background: #3f3015;
+  border-color: #74592a;
+}
+:root[data-theme='dark'] .confirm-btn.done,
+:root[data-theme='dark'] .confirm-btn[disabled] {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+:root[data-theme='dark'] .confirm-btn.confirmed,
+:root[data-theme='dark'] .confirm-btn.confirmed[disabled] {
+  border-color: #234238;
+  background: var(--green-bg);
 }
 
 /* 上传拖拽区 / 播放状态 / 帮助表格 */

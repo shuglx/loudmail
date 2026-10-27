@@ -78,9 +78,11 @@ pub fn cmd_set_config(
 
     *state.config.write().map_err(|e| e.to_string())? = config.clone();
     state.save_config()?;
-    state.config_version.fetch_add(1, Ordering::Relaxed);
 
     if endpoint_changed {
+        // 只有端点 / 模拟开关变了才需要作废旧连接并立刻重扫；
+        // 改主题、TTS 这类设置若也递增版本，会顺带触发一次多余的轮询
+        state.config_version.fetch_add(1, Ordering::Relaxed);
         let state = state.inner().clone();
         let host = config.mcp.host.clone();
         let port = config.mcp.port;

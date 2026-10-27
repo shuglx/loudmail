@@ -148,6 +148,9 @@ pub struct Strategy {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    /// 人工确认：命中后需在播报记录中确认，未确认时每轮轮询重复播报
+    #[serde(default)]
+    pub require_confirm: bool,
     pub sound_id: Option<String>,
     pub play_count: u8,
     pub cursor_seq: Option<u64>,
@@ -165,6 +168,8 @@ pub struct StrategyInput {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    #[serde(default)]
+    pub require_confirm: bool,
     pub sound_id: Option<String>,
     pub play_count: u8,
     pub enabled: bool,
@@ -193,6 +198,8 @@ pub struct StrategyExportItem {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    #[serde(default)]
+    pub require_confirm: bool,
     #[serde(default)]
     pub sound_id: Option<String>,
     /// 仅便于人工查看，导入时不作为依据
@@ -253,6 +260,22 @@ pub struct HistoryRecord {
     pub summary: String,
     pub sound_name: String,
     pub play_count: u8,
+    /// 命中时策略是否开启「人工确认」（快照：之后修改策略不影响已有记录）
+    #[serde(default)]
+    pub require_confirm: bool,
+    /// 是否已人工确认
+    #[serde(default)]
+    pub confirmed: bool,
+    #[serde(default)]
+    pub confirmed_at: Option<String>,
+    /// 命中时的语音 ID，供未确认记录重复播报时定位音频
+    #[serde(default)]
+    pub sound_id: Option<String>,
+    /// 已重复播报的次数（0 表示还在第一时间窗口内）
+    #[serde(default)]
+    pub rebroadcast_count: u32,
+    #[serde(default)]
+    pub last_broadcast_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -422,4 +445,53 @@ pub struct AppInfo {
     pub data_dir: String,
     pub storage_files: Vec<StorageFile>,
     pub log_path: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HistoryRecord, Strategy};
+
+    /// 老版本数据文件没有新字段，必须能按默认值读出来（否则会被备份重建、记录全丢）
+    #[test]
+    fn legacy_records_keep_working() {
+        let raw = r#"{
+            "id": "his_1",
+            "time": "2026-10-01 10:00:00",
+            "strategyId": "stg_1",
+            "strategyName": "SOC",
+            "mailId": "mock:1",
+            "sender": "a@b.com",
+            "subject": "测试",
+            "summary": "",
+            "soundName": "普通告警音",
+            "playCount": 1
+        }"#;
+        let record: HistoryRecord = serde_json::from_str(raw).unwrap();
+        assert!(!record.require_confirm);
+        assert!(!record.confirmed);
+        assert!(record.confirmed_at.is_none());
+        assert!(record.sound_id.is_none());
+        assert_eq!(record.rebroadcast_count, 0);
+        assert!(record.last_broadcast_at.is_none());
+    }
+
+    #[test]
+    fn legacy_strategies_default_to_no_confirm() {
+        let raw = r#"{
+            "id": "stg_1",
+            "name": "SOC",
+            "enabled": true,
+            "sender": "a@b.com",
+            "keyword": "SOC",
+            "matchMode": "contains",
+            "filterReplies": true,
+            "soundId": "普通告警音",
+            "playCount": 1,
+            "cursorSeq": null,
+            "createdAt": "2026-10-01T10:00:00+08:00",
+            "updatedAt": "2026-10-01T10:00:00+08:00"
+        }"#;
+        let strategy: Strategy = serde_json::from_str(raw).unwrap();
+        assert!(!strategy.require_confirm);
+    }
 }

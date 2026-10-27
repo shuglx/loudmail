@@ -358,7 +358,9 @@ pub fn search_debug(
     .unwrap_or_default();
 
     if mock {
-        let mut source = mock::MockSource::new();
+        let mut source = mock::MockSource::new(mock::BASE_SEQ);
+        // 模拟数据源本身不预置邮件，这里手动生成一封，保证「测试接口」有返回
+        source.tick();
         let response = match source.search(pattern, start_time, end_time, limit) {
             Ok(items) => {
                 let content: Vec<Value> = items

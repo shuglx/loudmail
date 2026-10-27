@@ -3,7 +3,7 @@ import { api } from '../api';
 import Modal from '../components/Modal';
 import Select from '../components/Select';
 import Switch from '../components/Switch';
-import { ExternalIcon } from '../icons';
+import { ExternalIcon, QuestionIcon } from '../icons';
 
 const GITHUB_URL = 'https://github.com/shuglx/loudmail';
 
@@ -25,6 +25,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   const [ttsUrl, setTtsUrl] = useState(config?.tts.intranetUrl || '');
   const [ttsKey, setTtsKey] = useState(config?.tts.intranetKey || '');
   const [ttsInstr, setTtsInstr] = useState(config?.tts.intranetInstructions || '');
+  const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!config) return;
@@ -198,8 +199,19 @@ export default function Settings({ config, status, flash, onConfigChange }) {
           <section className="settings-card">
             <div className="setting-row">
               <div className="label">
-                <b>MCP 端点</b>
-                <small>修改后下一轮扫描生效</small>
+                <div className="label-title">
+                  <b>MCP 端点</b>
+                  <button
+                    className="help-dot"
+                    type="button"
+                    title="如何开启 MCP"
+                    aria-label="如何开启 MCP"
+                    onClick={() => setMcpHelpOpen(true)}
+                  >
+                    <QuestionIcon size={12} />
+                  </button>
+                </div>
+                <small>对接邮箱的 MCP 服务</small>
               </div>
               <div className="endpoint">
                 <input
@@ -224,7 +236,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
             <div className="setting-row">
               <div className="label">
                 <b>连接状态</b>
-                <small>仅展示 MCP 是否可达</small>
+                <small>检测 MCP 是否可达</small>
               </div>
               <div className="endpoint-actions">
                 <span className={`conn-inline${status.connected ? '' : ' off'}`}>
@@ -540,6 +552,27 @@ export default function Settings({ config, status, flash, onConfigChange }) {
         {searchResult && searchResult.ok ? (
           <p className="hint">查询完成，用时 {searchResult.ms} ms</p>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={mcpHelpOpen}
+        title="如何开启 MCP"
+        wide
+        onClose={() => setMcpHelpOpen(false)}
+        footer={
+          <button className="btn" onClick={() => setMcpHelpOpen(false)}>
+            知道了
+          </button>
+        }
+      >
+        <p className="help-lead">
+          在邮箱客户端的「系统设置 → AI 设置」里勾选「打开 MCP」，应用中填写对应端口。
+        </p>
+        <img
+          className="help-shot"
+          src="/mcp-help.png"
+          alt="邮箱客户端系统设置中勾选打开 MCP 并填写端口"
+        />
       </Modal>
     </section>
   );

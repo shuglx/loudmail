@@ -47,42 +47,44 @@ const NAV = [
 const HELP_ROWS = [
   ['播报记录', '记录每次命中的邮件与播放的语音，可按发件人 / 标题搜索、确认收到未确认的告警。'],
   ['匹配策略', '按发件人邮箱 + 标题关键词过滤邮件，命中后播放指定语音；拖动列表可调整匹配优先级，同一封邮件只命中一次。'],
-  ['语音库', '内置铃声、上传音频、麦克风录音、文本转语音四种来源；支持把文本与铃声合成为一段报警语音。'],
+  ['语音库', '上传音频、麦克风录音、文本转语音（TTS）多种添加方式；支持把文本与铃声合成为一段报警语音。'],
   ['设置', 'MCP 端点、扫描间隔与检索时间窗、TTS 语音来源、开机自启动等参数调整。'],
   ['后台托盘', '关闭窗口即隐藏到托盘并继续监听；托盘菜单可显示主窗口、退出应用。'],
 ];
 
+// Windows 风格窗口按钮的图标：细线条，10×10
 const dotProps = {
-  viewBox: '0 0 8 8',
+  viewBox: '0 0 10 10',
   fill: 'none',
   stroke: 'currentColor',
-  strokeWidth: 1.1,
+  strokeWidth: 1,
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
   'aria-hidden': 'true',
 };
 
 const CloseGlyph = () => (
-  <svg width="7" height="7" {...dotProps}>
-    <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" />
+  <svg width="10" height="10" {...dotProps}>
+    <path d="M2 2l6 6M8 2l-6 6" />
   </svg>
 );
 
 const MinGlyph = () => (
-  <svg width="7" height="7" {...dotProps}>
-    <path d="M1.6 4h4.8" />
+  <svg width="10" height="10" {...dotProps}>
+    <path d="M2 5h6" />
   </svg>
 );
 
 const ExpandGlyph = () => (
-  <svg width="7" height="7" {...dotProps}>
-    <path d="M1.6 3V1.6H3M5 1.6h1.4V3M6.4 5v1.4H5M3 6.4H1.6V5" />
+  <svg width="10" height="10" {...dotProps}>
+    <rect x="2" y="2" width="6" height="6" />
   </svg>
 );
 
 const RestoreGlyph = () => (
-  <svg width="7" height="7" {...dotProps}>
-    <path d="M3 1.6V3H1.6M6.4 3H5V1.6M5 6.4V5h1.4M1.6 5H3v1.4" />
+  <svg width="10" height="10" {...dotProps}>
+    <path d="M4 2h4.5v4.5" />
+    <rect x="2" y="3.5" width="4.5" height="4.5" />
   </svg>
 );
 
@@ -353,27 +355,15 @@ export default function App() {
   return (
     <div className={`window${maximized ? ' maximized' : ''}`}>
       <header className="titlebar">
-        <div className="traffic">
-          <button className="dot close" title="隐藏到托盘" onClick={() => api.hideWindow()}>
-            <CloseGlyph />
-          </button>
-          <button className="dot min" title="最小化" onClick={() => api.minimizeWindow()}>
-            <MinGlyph />
-          </button>
-          <button
-            className="dot max"
-            title={maximized ? '还原' : '最大化'}
-            onClick={toggleMaximize}
-          >
-            {maximized ? <RestoreGlyph /> : <ExpandGlyph />}
-          </button>
-        </div>
-        {/* 拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），双击最大化已禁用 */}
-        <div className="titlebar-drag" data-tauri-drag-region>
-          <span className="titlebar-title">LoudMail</span>
-          <span className="proto-badge">v{appVersion || '—'}</span>
-        </div>
         <div className="titlebar-actions">
+          <button
+            className="icon-btn help-btn"
+            title="使用说明"
+            aria-label="使用说明"
+            onClick={() => setHelpOpen(true)}
+          >
+            <QuestionIcon />
+          </button>
           <button
             className="icon-btn"
             title={isDark ? '切换到浅色模式' : '切换到深色模式'}
@@ -382,13 +372,31 @@ export default function App() {
           >
             {isDark ? <SunIcon /> : <MoonIcon />}
           </button>
+        </div>
+        {/* 拖动交给 tauri 内置拖拽区（与 kylinpaste 一致），双击最大化已禁用 */}
+        <div className="titlebar-drag" data-tauri-drag-region>
+          <span className="titlebar-title">LoudMail</span>
+          <span className="proto-badge">v{appVersion || '—'}</span>
+        </div>
+        {/* Windows 风格窗口按钮：最小化 / 最大化(还原) / 关闭，靠右 */}
+        <div className="win-controls">
+          <button title="最小化" aria-label="最小化" onClick={() => api.minimizeWindow()}>
+            <MinGlyph />
+          </button>
           <button
-            className="icon-btn help-btn"
-            title="使用说明"
-            aria-label="使用说明"
-            onClick={() => setHelpOpen(true)}
+            title={maximized ? '还原' : '最大化'}
+            aria-label={maximized ? '还原' : '最大化'}
+            onClick={toggleMaximize}
           >
-            <QuestionIcon />
+            {maximized ? <RestoreGlyph /> : <ExpandGlyph />}
+          </button>
+          <button
+            className="close"
+            title="隐藏到托盘"
+            aria-label="关闭"
+            onClick={() => api.hideWindow()}
+          >
+            <CloseGlyph />
           </button>
         </div>
       </header>
@@ -518,7 +526,7 @@ export default function App() {
         }
       >
         <p className="help-lead">
-          轮询邮箱 MCP，邮件命中匹配策略时播放报警语音，确保重要邮件不漏听。
+          轮询邮箱，命中匹配策略时播放报警语音，确保第一时间获知重要邮件。
         </p>
         <table className="help-table">
           <thead>

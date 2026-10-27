@@ -267,7 +267,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
 
       <div className="strategy-meta">
         <span className="strategy-note">
-          根据策略顺序从上至下匹配，同一封邮件仅命中一次；开启「人工确认」的策略在确认前会每轮重复播报
+          根据策略顺序从上至下匹配、同一封邮件仅命中一次，开启「人工确认」的策略在确认前会每轮重复播报
         </span>
         <span className="muted strategy-count">
           {strategies.length} 条策略 · {enabledCount} 条启用
@@ -281,7 +281,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           <span>发件人邮箱</span>
           <span>标题关键词</span>
           <span>播报语音</span>
-          <span>需人工确认</span>
+          <span>人工确认</span>
           <span>策略启用</span>
           <span />
         </div>
@@ -522,7 +522,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
         </div>
         <div className="field field-inline">
           <div className="label">
-            需人工确认
+            人工确认
             <small>
               命中后需在播报记录中确认收到，未确认时每轮轮询重复播报
             </small>

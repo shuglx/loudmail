@@ -196,11 +196,12 @@ export default function History({ history, flash, onCleared }) {
             </p>
           </div>
         ) : (
-          items.map((record) => (
+          items.map((record) => {
+            // 已错过第一时间确认：重复播报过且仍未确认
+            const overdue = record.rebroadcastCount > 0 && !record.confirmed;
+            return (
             <div
-              className={`history-row${
-                record.rebroadcastCount > 0 && !record.confirmed ? ' overdue' : ''
-              }`}
+              className={`history-row${overdue ? ' overdue' : ''}`}
               key={record.id}
               role="button"
               tabIndex={0}
@@ -215,7 +216,16 @@ export default function History({ history, flash, onCleared }) {
               }}
             >
               <span className="history-grid">
-                <span className="history-time">{record.time.slice(5, 16)}</span>
+                <span className="history-time">
+                  <span className="history-date">{record.time.slice(5, 16)}</span>
+                  {overdue ? (
+                    <span className="history-time-tag">
+                      <span className="tag timeout" title="未在第一时间确认，已重复播报">
+                        重复播报
+                      </span>
+                    </span>
+                  ) : null}
+                </span>
                 <span className="history-strategy" title={record.strategyName}>
                   {record.strategyName}
                 </span>
@@ -261,7 +271,8 @@ export default function History({ history, flash, onCleared }) {
                 </span>
               </span>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

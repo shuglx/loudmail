@@ -38,15 +38,15 @@ function trimHistory(list) {
 }
 
 const NAV = [
-  { key: 'strategies', label: '匹配策略', icon: ShieldIcon },
   { key: 'history', label: '播报记录', icon: ClockIcon },
+  { key: 'strategies', label: '匹配策略', icon: ShieldIcon },
   { key: 'sounds', label: '语音库', icon: SpeakerIcon },
   { key: 'settings', label: '设置', icon: SlidersIcon },
 ];
 
 const HELP_ROWS = [
-  ['匹配策略', '按发件人邮箱 + 标题关键词过滤邮件，命中后播放指定语音；拖动列表可调整匹配优先级，同一封邮件只命中一次。'],
   ['播报记录', '记录每次命中的邮件与播放的语音，可按发件人 / 标题搜索、确认收到未确认的告警。'],
+  ['匹配策略', '按发件人邮箱 + 标题关键词过滤邮件，命中后播放指定语音；拖动列表可调整匹配优先级，同一封邮件只命中一次。'],
   ['语音库', '内置铃声、上传音频、麦克风录音、文本转语音四种来源；支持把文本与铃声合成为一段报警语音。'],
   ['设置', 'MCP 端点、扫描间隔与检索时间窗、TTS 语音来源、开机自启动等参数调整。'],
   ['后台托盘', '关闭窗口即隐藏到托盘并继续监听；托盘菜单可显示主窗口、退出应用。'],

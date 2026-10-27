@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "LoudMail",
-    "version": "1.3.5"
+    "version": "1.4.0"
   },
   "tauri": {
     "macOSPrivateApi": true,
@@ -36,8 +36,8 @@
       {
         "label": "main",
         "title": "LoudMail",
-        "width": 1000,
-        "height": 680,
+        "width": 1180,
+        "height": 760,
         "minWidth": 880,
         "minHeight": 600,
         "resizable": true,

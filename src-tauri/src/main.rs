@@ -44,7 +44,6 @@ pub fn show_main(app: &AppHandle) {
             // 无边框窗口下它就是顶部那条 22px 的透明带,每次唤出后都要补隐藏一次
             hide_empty_gtk_menubar(app);
 
-            let handle = app.clone();
             std::thread::spawn(move || {
                 for _ in 0..10 {
                     std::thread::sleep(std::time::Duration::from_millis(80));
@@ -77,13 +76,14 @@ pub fn show_main(app: &AppHandle) {
 #[cfg(target_os = "linux")]
 fn hide_empty_gtk_menubar(app: &AppHandle) {
     static LOGGED: AtomicBool = AtomicBool::new(false);
-    let app = app.clone();
+    // 闭包需要 'static，这里先克隆一份给闭包，app 本身只用来派发
+    let handle = app.clone();
     // GTK 调用必须在主线程：托盘回调恰在主循环里，tauri 命令则在线程池里，
     // 统一经 run_on_main_thread 派发
     let _ = app.run_on_main_thread(move || {
         use gtk::prelude::*;
 
-        let Some(window) = app.get_window("main") else {
+        let Some(window) = handle.get_window("main") else {
             return;
         };
         let Ok(gtk_window) = window.gtk_window() else {

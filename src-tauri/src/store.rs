@@ -156,8 +156,11 @@ pub fn load_strategies(paths: &AppPaths) -> Vec<Strategy> {
     let mut items = read_json::<StrategiesFile>(&paths.strategies)
         .map(|f| f.items)
         .unwrap_or_default();
+    // 模拟策略由 mock 开关在内存中临时维护，文件里出现一律视为旧残留
+    let had_mock = items.iter().any(|item| item.id == MOCK_STRATEGY_ID);
+    items.retain(|item| item.id != MOCK_STRATEGY_ID);
     // 内置铃声 ID 改为文件名后，同步迁移历史策略里的引用
-    let mut migrated = false;
+    let mut migrated = had_mock;
     for item in items.iter_mut() {
         if let Some(new_id) = item.sound_id.as_deref().and_then(legacy_builtin_id) {
             item.sound_id = Some(new_id.to_string());
@@ -176,11 +179,16 @@ pub fn load_strategies(paths: &AppPaths) -> Vec<Strategy> {
 }
 
 pub fn save_strategies(paths: &AppPaths, items: &[Strategy]) -> Result<(), String> {
+    let real: Vec<Strategy> = items
+        .iter()
+        .filter(|item| item.id != MOCK_STRATEGY_ID)
+        .cloned()
+        .collect();
     write_json(
         &paths.strategies,
         &StrategiesFile {
             version: 1,
-            items: items.to_vec(),
+            items: real,
         },
     )
 }

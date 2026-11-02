@@ -6,8 +6,78 @@ use tauri::{AppHandle, Manager};
 
 use crate::audio::player::{start as start_player, PlayerHandle};
 use crate::audio::recorder::RecorderHandle;
+use crate::mcp::mock;
 use crate::models::*;
 use crate::store::{self, AppPaths};
+
+/// mock 策略默认使用内置「紧急告警音」：全新安装也一定存在，便于直接验证播报
+const MOCK_SOUND_ID: &str = "紧急告警音";
+
+/// mock 开关打开时临时插入的匹配策略（固定 id，排在列表第一）
+fn build_mock_strategy(sound_id: Option<String>) -> Strategy {
+    let now = store::now_iso();
+    // 游标停在 BASE_SEQ 之前：打开模拟邮箱后第一封模拟邮件即可命中播报，
+    // 不必像新建策略那样先"初始化"一轮
+    let mut cursor = CursorSeq::default();
+    cursor.advance(mock::SOURCE, mock::BASE_SEQ.saturating_sub(1));
+    Strategy {
+        id: MOCK_STRATEGY_ID.into(),
+        name: "[mock] 模拟邮箱告警".into(),
+        enabled: true,
+        sender: mock::EMAIL.into(),
+        keyword: mock::KEYWORD.into(),
+        match_mode: "contains".into(),
+        filter_replies: true,
+        require_confirm: false,
+        sound_id,
+        play_count: 1,
+        cursor_seq: cursor,
+        created_at: now.clone(),
+        updated_at: now,
+    }
+}
+
+/// 按 mock 开关维护临时策略：开启时确保存在且位于第一，关闭时移除。
+/// 返回列表是否发生变化（用于通知前端刷新）。
+fn sync_mock_strategy_list(
+    strategies: &mut Vec<Strategy>,
+    mock_on: bool,
+    sound_id: Option<String>,
+) -> bool {
+    let position = strategies.iter().position(|s| s.id == MOCK_STRATEGY_ID);
+    if !mock_on {
+        if position.is_some() {
+            strategies.retain(|s| s.id != MOCK_STRATEGY_ID);
+            return true;
+        }
+        return false;
+    }
+    match position {
+        Some(index) => {
+            let mut changed = index != 0;
+            let mut item = strategies.remove(index);
+            if item.sender != mock::EMAIL || item.keyword != mock::KEYWORD {
+                item.sender = mock::EMAIL.into();
+                item.keyword = mock::KEYWORD.into();
+                changed = true;
+            }
+            if item.sound_id.is_none() && sound_id.is_some() {
+                item.sound_id = sound_id;
+                changed = true;
+            }
+            if !item.enabled {
+                item.enabled = true;
+                changed = true;
+            }
+            strategies.insert(0, item);
+            changed
+        }
+        None => {
+            strategies.insert(0, build_mock_strategy(sound_id));
+            true
+        }
+    }
+}
 
 pub struct AppState {
     pub app: AppHandle,
@@ -45,6 +115,19 @@ impl AppState {
         for record in &history {
             seen.insert(record.mail_id.clone());
         }
+        // mock 开关是持久化配置：启动时按它补入 / 清理临时策略
+        let fallback_sound = sounds
+            .iter()
+            .find(|item| item.id == MOCK_SOUND_ID)
+            .map(|item| item.id.clone())
+            .or_else(|| {
+                strategies
+                    .iter()
+                    .find(|item| item.id != MOCK_STRATEGY_ID)
+                    .and_then(|item| item.sound_id.clone())
+            })
+            .or_else(|| sounds.first().map(|item| item.id.clone()));
+        sync_mock_strategy_list(&mut strategies, config.behavior.mock, fallback_sound);
         let runtime = RuntimeStatus {
             connected: false,
             server_name: None,
@@ -73,6 +156,48 @@ impl AppState {
 
     pub fn save_strategies(&self) -> Result<(), String> {
         store::save_strategies(&self.paths, &self.strategies.read().unwrap())
+    }
+
+    /// mock 开关变化时调用：增删临时策略并通知前端刷新列表
+    pub fn sync_mock_strategy(&self) -> Result<bool, String> {
+        let mock_on = self
+            .config
+            .read()
+            .map(|c| c.behavior.mock)
+            .unwrap_or(false);
+        let sound_id = self
+            .sounds
+            .read()
+            .ok()
+            .and_then(|list| {
+                list.iter()
+                    .find(|item| item.id == MOCK_SOUND_ID)
+                    .map(|item| item.id.clone())
+            })
+            .or_else(|| {
+                self.strategies
+                    .read()
+                    .ok()
+                    .and_then(|list| {
+                        list.iter()
+                            .find(|item| item.id != MOCK_STRATEGY_ID)
+                            .and_then(|item| item.sound_id.clone())
+                    })
+            })
+            .or_else(|| {
+                self.sounds
+                    .read()
+                    .ok()
+                    .and_then(|list| list.first().map(|item| item.id.clone()))
+            });
+        let changed = {
+            let mut strategies = self.strategies.write().map_err(|e| e.to_string())?;
+            sync_mock_strategy_list(&mut strategies, mock_on, sound_id)
+        };
+        if changed {
+            let _ = self.app.emit_all("strategies://changed", ());
+        }
+        Ok(changed)
     }
 
     pub fn save_history(&self) -> Result<(), String> {
@@ -129,5 +254,56 @@ impl AppState {
             .iter()
             .find(|s| s.id == id)
             .cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn real_strategy(id: &str) -> Strategy {
+        Strategy {
+            id: id.into(),
+            name: "真实策略".into(),
+            enabled: true,
+            sender: "a@b.com".into(),
+            keyword: "告警".into(),
+            match_mode: "contains".into(),
+            filter_replies: true,
+            require_confirm: false,
+            sound_id: Some("snd".into()),
+            play_count: 1,
+            cursor_seq: CursorSeq::default(),
+            created_at: "2026-01-01T00:00:00+08:00".into(),
+            updated_at: "2026-01-01T00:00:00+08:00".into(),
+        }
+    }
+
+    #[test]
+    fn mock_strategy_is_inserted_first_and_removed_on_close() {
+        let mut list = vec![real_strategy("stg_real")];
+        assert!(sync_mock_strategy_list(&mut list, true, Some("snd".into())));
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].id, MOCK_STRATEGY_ID);
+        assert!(list[0].name.starts_with("[mock]"));
+        assert_eq!(list[0].sender, mock::EMAIL);
+        assert_eq!(list[0].keyword, mock::KEYWORD);
+        assert_eq!(
+            list[0].cursor_seq.get(mock::SOURCE),
+            Some(mock::BASE_SEQ - 1)
+        );
+
+        assert!(sync_mock_strategy_list(&mut list, false, None));
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "stg_real");
+    }
+
+    #[test]
+    fn existing_mock_strategy_is_moved_to_front() {
+        let mut list = vec![real_strategy("stg_real"), real_strategy(MOCK_STRATEGY_ID)];
+        assert!(sync_mock_strategy_list(&mut list, true, Some("snd".into())));
+        assert_eq!(list[0].id, MOCK_STRATEGY_ID);
+        // 已存在于第一位时再同步不产生变化
+        assert!(!sync_mock_strategy_list(&mut list, true, Some("snd".into())));
     }
 }

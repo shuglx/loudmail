@@ -61,6 +61,11 @@ pub fn cmd_set_config(
     }
     // 端点 / 模拟开关变化时，旧连接立即失效，并在后台立刻探一次，
     // 让状态马上反映"改完之后到底通不通"，不必等下一轮（也避免连续两次失败才翻红）
+    let mock_changed = state
+        .config
+        .read()
+        .map(|old| old.behavior.mock != config.behavior.mock)
+        .unwrap_or(false);
     let endpoint_changed = {
         let current = state.config.read().map(|c| c.clone()).ok();
         match current {
@@ -75,6 +80,13 @@ pub fn cmd_set_config(
 
     *state.config.write().map_err(|e| e.to_string())? = config.clone();
     state.save_config()?;
+
+    if mock_changed {
+        // 开启时在列表最前插入临时模拟策略，关闭时立即移除
+        if let Err(e) = state.sync_mock_strategy() {
+            logfile::warn(format!("同步模拟策略失败: {e}"));
+        }
+    }
 
     if endpoint_changed {
         // 只有端点 / 模拟开关变了才需要作废旧连接并立刻重扫；

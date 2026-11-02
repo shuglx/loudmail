@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -106,7 +106,7 @@ fn scan(
     let skip_backlog = state.skip_backlog.swap(false, Ordering::Relaxed);
 
     if config.behavior.mock {
-        // 模拟邮件的序号必须接在现有游标之后：游标是持久化的，而 mock 每次启动
+        // 模拟邮件的序号必须接在「模拟空间」现有游标之后：游标是持久化的，而 mock 每次启动
         // 都从 BASE_SEQ 重新计数，序号一旦落后于游标，新邮件会被当成旧邮件全部跳过
         let start_seq = state
             .strategies
@@ -114,10 +114,10 @@ fn scan(
             .map(|items| {
                 items
                     .iter()
-                    .filter_map(|item| item.cursor_seq)
+                    .filter_map(|item| item.cursor_seq.get(mock::SOURCE))
                     .max()
-                    .unwrap_or(0)
-                    + 1
+                    .map(|seq| seq + 1)
+                    .unwrap_or(mock::BASE_SEQ)
             })
             .unwrap_or(mock::BASE_SEQ);
         let source = mock.get_or_insert_with(|| MockSource::new(start_seq));
@@ -236,6 +236,16 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         .collect();
     let raw_max_seq = items.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
     let max_seq = matched.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
+    // 按来源序号空间（mail_id 最后一个冒号之前的部分）分组：不同空间的序号互不可比
+    let mut space_max: BTreeMap<String, u64> = BTreeMap::new();
+    for mail in &matched {
+        if let Some(seq) = mail.seq() {
+            let entry = space_max.entry(mail.source().to_string()).or_insert(seq);
+            if *entry < seq {
+                *entry = seq;
+            }
+        }
+    }
     let ignored_note = || {
         let ignored = items.len().saturating_sub(matched.len());
         if raw_max_seq > max_seq && ignored > 0 {
@@ -245,13 +255,17 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         }
     };
 
+    let mut cursors = strategy.cursor_seq.clone();
+
     if skip_backlog {
-        let next = max_seq.max(strategy.cursor_seq.unwrap_or(0));
-        set_cursor(state, &strategy.id, next);
+        for (source, seq) in &space_max {
+            cursors.advance(source, *seq);
+        }
+        set_cursor(state, &strategy.id, cursors.clone());
         logfile::info(format!(
             "策略「{}」恢复播报，跳过暂停期间的邮件，游标推进到 {}（返回 {} 条，命中 {} 条）{}",
             strategy.name,
-            next,
+            cursors.summary(),
             items.len(),
             matched.len(),
             ignored_note()
@@ -259,29 +273,36 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         return;
     }
 
-    let cursor = match strategy.cursor_seq {
-        Some(seq) => seq,
-        None => {
-            set_cursor(state, &strategy.id, max_seq);
-            logfile::info(format!(
-                "策略「{}」初始化游标为 {}（返回 {} 条，命中 {} 条）{}",
-                strategy.name,
-                max_seq,
-                items.len(),
-                matched.len(),
-                ignored_note()
-            ));
-            return;
+    let before = strategy.cursor_seq.clone();
+    let mut candidates: Vec<MailItem> = Vec::new();
+    let mut initialized: Vec<String> = Vec::new();
+    for mail in &matched {
+        let Some(seq) = mail.seq() else { continue };
+        match cursors.get(mail.source()) {
+            // 该来源空间首次出现：只初始化到本空间最大值，本轮不播报
+            None => {
+                if let Some(max) = space_max.get(mail.source()) {
+                    cursors.advance(mail.source(), *max);
+                    initialized.push(format!("{}={}", mail.source(), max));
+                }
+            }
+            Some(current) if seq > current => candidates.push((*mail).clone()),
+            _ => {}
         }
-    };
-
-    let mut candidates: Vec<MailItem> = matched
-        .iter()
-        .filter(|mail| mail.seq().unwrap_or(0) > cursor)
-        .map(|mail| (*mail).clone())
-        .collect();
+    }
     candidates.sort_by_key(|m| m.seq().unwrap_or(0));
     let mut skipped_seen = 0usize;
+
+    if !initialized.is_empty() {
+        logfile::info(format!(
+            "策略「{}」初始化游标：{}（返回 {} 条，命中 {} 条）{}",
+            strategy.name,
+            initialized.join(", "),
+            items.len(),
+            matched.len(),
+            ignored_note()
+        ));
+    }
 
     let sound = strategy
         .sound_id
@@ -366,16 +387,19 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         ));
     }
 
-    let next = max_seq.max(cursor);
-    set_cursor(state, &strategy.id, next);
-    if next != cursor {
+    for (source, seq) in &space_max {
+        cursors.advance(source, *seq);
+    }
+    let changed = cursors != before;
+    set_cursor(state, &strategy.id, cursors.clone());
+    if changed {
         logfile::info(format!(
             "[匹配] 策略「{}」返回 {} 条，命中 {} 条，游标 {} -> {}{}",
             strategy.name,
             items.len(),
             matched.len(),
-            cursor,
-            next,
+            before.summary(),
+            cursors.summary(),
             ignored_note()
         ));
     }
@@ -479,10 +503,10 @@ fn rebroadcast_pending(state: &AppState, warned_missing: &mut HashSet<String>) {
     ));
 }
 
-fn set_cursor(state: &AppState, strategy_id: &str, seq: u64) {
+fn set_cursor(state: &AppState, strategy_id: &str, cursor: CursorSeq) {
     if let Ok(mut strategies) = state.strategies.write() {
         if let Some(item) = strategies.iter_mut().find(|s| s.id == strategy_id) {
-            item.cursor_seq = Some(seq);
+            item.cursor_seq = cursor;
             item.updated_at = store::now_iso();
         }
     }

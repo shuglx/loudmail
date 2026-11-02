@@ -5,7 +5,6 @@ import http from 'node:http';
 const port = Number(process.env.MOCK_MCP_PORT || 11328);
 const sessions = new Map();
 let seq = 22010;
-let nextKind = 0;
 
 const nowText = () => {
   const d = new Date();
@@ -15,22 +14,14 @@ const nowText = () => {
   )}:${p(d.getSeconds())}`;
 };
 
+// 与真实业务邮件刻意区分：固定发件人 + [MOCK] 前缀标题
 function makeMail() {
-  const kind = nextKind++ % 2;
   const id = seq++;
-  if (kind === 0) {
-    return {
-      mail_id: `mock:${id}`,
-      sender: '"aqyyptsoc" <aqyyptsoc@dc.xxxx.com.cn>',
-      subject: `【5级】SOC_安全告警_HIPS_10.9.${id % 200}.${id % 90}`,
-      summary: `5级告警处置要求：15分钟内通知到应用维护部门。模拟时间 ${nowText()}`,
-    };
-  }
   return {
     mail_id: `mock:${id}`,
-    sender: '"DBA Alert" <dba-alert@dc.xxxx.com.cn>',
-    subject: `DB_ALERT_连接数异常_节点_${id % 20}`,
-    summary: `数据库连接数超过阈值。模拟时间 ${nowText()}`,
+    sender: '"LoudMail Mock" <mock@loudmail.dev>',
+    subject: `[MOCK] 模拟测试告警 #${id}`,
+    summary: `这是 LoudMail 模拟数据，不来自真实邮箱。模拟时间 ${nowText()}`,
   };
 }
 
@@ -119,5 +110,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`[mock-coremail] SSE  http://127.0.0.1:${port}/sse`);
-  console.log('[mock-coremail] 每 5 秒生成一封 SOC / DB 模拟邮件');
+  console.log('[mock-coremail] 每 5 秒生成一封 [MOCK] 模拟告警邮件');
 });

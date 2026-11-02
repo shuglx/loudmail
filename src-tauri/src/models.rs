@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize};
+
 
 fn default_true() -> bool {
     true
@@ -132,6 +135,9 @@ fn default_match_mode() -> String {
     "contains".into()
 }
 
+/// mock 开关自动维护的临时策略 id：不写入 strategies.json，也不参与导出
+pub const MOCK_STRATEGY_ID: &str = "stg_mock";
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Strategy {
@@ -149,9 +155,64 @@ pub struct Strategy {
     pub require_confirm: bool,
     pub sound_id: Option<String>,
     pub play_count: u8,
-    pub cursor_seq: Option<u64>,
+    /// 按「来源序号空间」分别维护的游标：key 为 mail_id 的前缀（如 1730277553 / mock）
+    #[serde(default)]
+    pub cursor_seq: CursorSeq,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// 各「来源序号空间」的游标。序列化为对象：`{"1730277553": 21997, "mock": 22195}`。
+/// 不同来源的序号各自独立比较，避免模拟数据或其它邮箱的序号把真实游标推走。
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(transparent)]
+pub struct CursorSeq(pub BTreeMap<String, u64>);
+
+impl CursorSeq {
+    pub fn get(&self, source: &str) -> Option<u64> {
+        self.0.get(source).copied()
+    }
+
+    /// 只增不减：同一来源多次写入取最大值
+    pub fn advance(&mut self, source: &str, seq: u64) {
+        let entry = self.0.entry(source.to_string()).or_insert(seq);
+        if *entry < seq {
+            *entry = seq;
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        if self.0.is_empty() {
+            return "无".into();
+        }
+        self.0
+            .iter()
+            .map(|(source, seq)| format!("{source}={seq}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+impl<'de> Deserialize<'de> for CursorSeq {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::Object(map) => {
+                let mut items = BTreeMap::new();
+                for (source, seq) in map {
+                    if let Some(seq) = seq.as_u64() {
+                        items.insert(source, seq);
+                    }
+                }
+                Ok(Self(items))
+            }
+            // 旧版是单个数字：无法判断来自哪个序号空间，留空由下一轮扫描按来源重新初始化
+            _ => Ok(Self::default()),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -313,6 +374,15 @@ impl MailItem {
         self.mail_id.rsplit(':').next()?.parse::<u64>().ok()
     }
 
+    /// 序号空间（mail_id 的最后一个冒号之前的部分）。
+    /// 不同前缀的序号不能互相比较，例如真实邮箱 `1730277553:21995` 与模拟数据 `mock:22195`。
+    pub fn source(&self) -> &str {
+        self.mail_id
+            .rsplit_once(':')
+            .map(|(source, _)| source)
+            .unwrap_or(self.mail_id.as_str())
+    }
+
     pub fn sender_email(&self) -> String {
         sender_email(&self.sender)
     }
@@ -445,7 +515,7 @@ pub struct AppInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::{HistoryRecord, Strategy};
+    use super::{CursorSeq, HistoryRecord, MailItem, Strategy};
 
     /// 老版本数据文件没有新字段，必须能按默认值读出来（否则会被备份重建、记录全丢）
     #[test]
@@ -489,5 +559,68 @@ mod tests {
         }"#;
         let strategy: Strategy = serde_json::from_str(raw).unwrap();
         assert!(!strategy.require_confirm);
+    }
+
+    /// 旧版游标是单个数字，无法判断来源，读取时留空 → 下一轮扫描按来源重新初始化
+    #[test]
+    fn legacy_numeric_cursor_resets_to_empty_spaces() {
+        let raw = r#"{
+            "id": "stg_1",
+            "name": "SOC",
+            "enabled": true,
+            "sender": "a@b.com",
+            "keyword": "SOC",
+            "matchMode": "contains",
+            "filterReplies": true,
+            "soundId": "普通告警音",
+            "playCount": 1,
+            "cursorSeq": 21997,
+            "createdAt": "2026-10-01T10:00:00+08:00",
+            "updatedAt": "2026-10-01T10:00:00+08:00"
+        }"#;
+        let strategy: Strategy = serde_json::from_str(raw).unwrap();
+        assert!(strategy.cursor_seq.0.is_empty());
+    }
+
+    #[test]
+    fn cursor_is_tracked_per_source_space() {
+        let raw = r#"{
+            "id": "stg_1",
+            "name": "SOC",
+            "enabled": true,
+            "sender": "a@b.com",
+            "keyword": "SOC",
+            "matchMode": "contains",
+            "filterReplies": true,
+            "soundId": "普通告警音",
+            "playCount": 1,
+            "cursorSeq": { "1730277553": 21997, "mock": 22195 },
+            "createdAt": "2026-10-01T10:00:00+08:00",
+            "updatedAt": "2026-10-01T10:00:00+08:00"
+        }"#;
+        let strategy: Strategy = serde_json::from_str(raw).unwrap();
+        assert_eq!(strategy.cursor_seq.get("1730277553"), Some(21997));
+        assert_eq!(strategy.cursor_seq.get("mock"), Some(22195));
+
+        let value = serde_json::to_value(&strategy).unwrap();
+        assert_eq!(value["cursorSeq"]["mock"], 22195);
+
+        let mut cursor = CursorSeq::default();
+        cursor.advance("mock", 10);
+        cursor.advance("mock", 5);
+        assert_eq!(cursor.get("mock"), Some(10));
+    }
+
+    #[test]
+    fn mail_id_separates_source_and_seq() {
+        let mail = MailItem {
+            mail_id: "1730277553:21995".into(),
+            sender: String::new(),
+            subject: String::new(),
+            summary: String::new(),
+        };
+        assert_eq!(mail.source(), "1730277553");
+        assert_eq!(mail.seq(), Some(21995));
+        assert_eq!(mail.source(), mail.mail_id.rsplit_once(':').unwrap().0);
     }
 }

@@ -6,8 +6,14 @@ use crate::models::MailItem;
 const MAX_MAILS: usize = 500;
 /// 模拟邮件 mailId 的起始序号下限
 pub const BASE_SEQ: u64 = 21598;
+/// 模拟邮件的序号空间前缀：与真实邮箱的序号各自独立比较
+pub const SOURCE: &str = "mock";
+/// 模拟策略使用的固定发件人与标题关键词：与真实业务邮件刻意区分，避免误命中
+pub const EMAIL: &str = "mock@loudmail.dev";
+pub const SENDER: &str = "\"LoudMail Mock\" <mock@loudmail.dev>";
+pub const KEYWORD: &str = "[MOCK] 模拟测试告警";
 
-/// 模拟邮箱：每轮轮询追加一封 SOC 告警，便于联调「匹配 → 播报 → 确认」整条链路
+/// 模拟邮箱：每轮轮询追加一封 [MOCK] 模拟告警，便于联调「匹配 → 播报 → 确认」整条链路
 pub struct MockSource {
     mails: Vec<MailItem>,
     next_seq: u64,
@@ -62,10 +68,10 @@ impl MockSource {
         self.next_seq += 1;
         let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.mails.push(MailItem {
-            mail_id: format!("mock:{seq}"),
-            sender: "\"aqyyptsoc\" <aqyyptsoc@dc.xxxx.com.cn>".into(),
-            subject: format!("【5级】SOC_安全告警_HIPS_10.9.{}.{}", seq % 200, seq % 90),
-            summary: format!("5级告警处置要求：15分钟内通知到应用维护部门。模拟时间 {now}"),
+            mail_id: format!("{SOURCE}:{seq}"),
+            sender: SENDER.into(),
+            subject: format!("{KEYWORD} #{seq}"),
+            summary: format!("这是 LoudMail 模拟数据，不来自真实邮箱。模拟时间 {now}"),
         });
         if self.mails.len() > MAX_MAILS {
             let overflow = self.mails.len() - MAX_MAILS;
@@ -76,35 +82,39 @@ impl MockSource {
 
 #[cfg(test)]
 mod tests {
-    use super::{MockSource, BASE_SEQ};
+    use super::{MockSource, BASE_SEQ, KEYWORD, SOURCE};
+
+    fn search(source: &MockSource, pattern: &str, limit: u32) -> Vec<super::MailItem> {
+        source.search(pattern, "", "", limit).unwrap()
+    }
 
     #[test]
     fn starts_after_the_given_cursor() {
         let mut source = MockSource::new(900_000);
         source.tick();
-        let items = source.search("SOC", "", "", 10).unwrap();
+        let items = search(&source, KEYWORD, 10);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].mail_id, "mock:900000");
+        assert_eq!(items[0].mail_id, format!("{SOURCE}:900000"));
     }
 
     #[test]
     fn never_starts_below_base_seq() {
         let mut source = MockSource::new(10);
         source.tick();
-        let items = source.search("SOC", "", "", 10).unwrap();
-        assert_eq!(items[0].mail_id, format!("mock:{BASE_SEQ}"));
+        let items = search(&source, KEYWORD, 10);
+        assert_eq!(items[0].mail_id, format!("{SOURCE}:{BASE_SEQ}"));
     }
 
     #[test]
     fn one_tick_produces_exactly_one_mail() {
         let mut source = MockSource::new(900_000);
-        assert!(source.search("SOC", "", "", 10).unwrap().is_empty());
+        assert!(search(&source, KEYWORD, 10).is_empty());
         source.tick();
-        let items = source.search("SOC_安全告警", "", "", 10).unwrap();
+        let items = search(&source, KEYWORD, 10);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].mail_id, "mock:900000");
-        assert!(items[0].sender.contains("aqyyptsoc@dc.xxxx.com.cn"));
-        assert!(items[0].subject.contains("SOC_安全告警"));
+        assert_eq!(items[0].mail_id, format!("{SOURCE}:900000"));
+        assert!(items[0].sender.contains("mock@loudmail.dev"));
+        assert!(items[0].subject.contains(KEYWORD));
     }
 
     #[test]
@@ -113,9 +123,9 @@ mod tests {
         for _ in 0..5 {
             source.tick();
         }
-        let items = source.search("SOC", "", "", 3).unwrap();
+        let items = search(&source, KEYWORD, 3);
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].mail_id, "mock:900002");
-        assert_eq!(items[2].mail_id, "mock:900004");
+        assert_eq!(items[0].mail_id, format!("{SOURCE}:900002"));
+        assert_eq!(items[2].mail_id, format!("{SOURCE}:900004"));
     }
 }

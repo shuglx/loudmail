@@ -7,8 +7,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::logfile;
 use crate::models::{
-    Strategy, StrategyExportFile, StrategyExportItem, StrategyImportPreview, StrategyImportResult,
-    StrategyInput,
+    CursorSeq, Strategy, StrategyExportFile, StrategyExportItem, StrategyImportPreview,
+    StrategyImportResult, StrategyInput, MOCK_STRATEGY_ID,
 };
 use crate::state::AppState;
 use crate::store;
@@ -84,6 +84,8 @@ fn build_export(state: &AppState) -> Result<StrategyExportFile, String> {
     let sounds = state.sounds.read().map_err(|e| e.to_string())?;
     let items = strategies
         .iter()
+        // 模拟策略由 mock 开关临时维护，不进入导出文件
+        .filter(|item| item.id != MOCK_STRATEGY_ID)
         .map(|item| StrategyExportItem {
             name: item.name.clone(),
             sender: item.sender.clone(),
@@ -237,7 +239,7 @@ pub fn cmd_import_strategies(
                 target.updated_at = store::now_iso();
                 if cond_changed {
                     // 条件变了：下一轮只做游标初始化，避免补播历史邮件
-                    target.cursor_seq = None;
+                    target.cursor_seq = CursorSeq::default();
                 }
                 result.updated += 1;
             }
@@ -254,7 +256,7 @@ pub fn cmd_import_strategies(
                     require_confirm: item.require_confirm,
                     sound_id,
                     play_count,
-                    cursor_seq: None,
+                    cursor_seq: CursorSeq::default(),
                     created_at: now.clone(),
                     updated_at: now,
                 });
@@ -302,7 +304,7 @@ pub fn cmd_create_strategy(
         require_confirm: input.require_confirm,
         sound_id: input.sound_id,
         play_count: input.play_count,
-        cursor_seq: None,
+        cursor_seq: CursorSeq::default(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -321,6 +323,9 @@ pub fn cmd_update_strategy(
     id: String,
     input: StrategyInput,
 ) -> Result<Strategy, String> {
+    if id == MOCK_STRATEGY_ID {
+        return Err("模拟策略由「模拟邮箱」开关自动管理，不能修改".into());
+    }
     let input = validate(&state, &input)?;
     let mut strategies = state.strategies.write().map_err(|e| e.to_string())?;
     let item = strategies
@@ -342,7 +347,7 @@ pub fn cmd_update_strategy(
     item.play_count = input.play_count;
     item.updated_at = store::now_iso();
     if cond_changed {
-        item.cursor_seq = None;
+        item.cursor_seq = CursorSeq::default();
     }
     let result = item.clone();
     drop(strategies);
@@ -352,6 +357,9 @@ pub fn cmd_update_strategy(
 
 #[tauri::command]
 pub fn cmd_delete_strategy(state: State<'_, Arc<AppState>>, id: String) -> Result<(), String> {
+    if id == MOCK_STRATEGY_ID {
+        return Err("模拟策略由「模拟邮箱」开关自动管理，不能删除".into());
+    }
     state
         .strategies
         .write()
@@ -366,6 +374,9 @@ pub fn cmd_set_strategy_enabled(
     id: String,
     enabled: bool,
 ) -> Result<(), String> {
+    if id == MOCK_STRATEGY_ID {
+        return Err("模拟策略由「模拟邮箱」开关自动管理".into());
+    }
     if let Some(item) = state
         .strategies
         .write()
@@ -414,6 +425,13 @@ pub fn cmd_reorder_strategies(
     for item in strategies.iter() {
         if !ids.contains(&item.id) {
             ordered.push(item.clone());
+        }
+    }
+    // 模拟策略必须始终固定在第一位
+    if let Some(index) = ordered.iter().position(|item| item.id == MOCK_STRATEGY_ID) {
+        if index > 0 {
+            let item = ordered.remove(index);
+            ordered.insert(0, item);
         }
     }
     *strategies = ordered;

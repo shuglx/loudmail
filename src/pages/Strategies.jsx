@@ -22,6 +22,10 @@ const MATCH_MODES = [
 const modeMeta = (mode) =>
   MATCH_MODES.find((item) => item.key === mode) || MATCH_MODES[0];
 
+/// 「模拟邮箱」开关自动维护的临时策略：不可编辑 / 删除 / 拖动
+const isMockStrategy = (strategy) =>
+  strategy.id === 'stg_mock' || strategy.name.startsWith('[mock]');
+
 const emptyForm = {
   name: '',
   sender: '',
@@ -299,22 +303,25 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
             ordered.map((strategy) => {
               const sound = sounds.find((s) => s.id === strategy.soundId);
               const mode = modeMeta(strategy.matchMode);
+              const mock = isMockStrategy(strategy);
               return (
                 <div
                   key={strategy.id}
                   data-id={strategy.id}
-                  className={`strategy-row strategy-grid${
+                  className={`strategy-row strategy-grid${mock ? ' mock-row' : ''}${
                     drag?.id === strategy.id ? ' dragging' : ''
                   }`}
                 >
                   <div className="drag-cell">
-                    <span
-                      className="drag-handle"
-                      title="拖动排序"
-                      onMouseDown={(e) => startDrag(e, strategy)}
-                    >
-                      <GripIcon />
-                    </span>
+                    {mock ? null : (
+                      <span
+                        className="drag-handle"
+                        title="拖动排序"
+                        onMouseDown={(e) => startDrag(e, strategy)}
+                      >
+                        <GripIcon />
+                      </span>
+                    )}
                   </div>
                   <div className="strategy-name" title={strategy.name}>
                     {strategy.name}
@@ -356,27 +363,36 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
                   <div>
                     <Switch
                       checked={strategy.enabled}
+                      disabled={mock}
                       onChange={(checked) => toggle(strategy, checked)}
-                      title={strategy.enabled ? '停用' : '启用'}
+                      title={
+                        mock ? '模拟策略由「模拟邮箱」开关自动管理' : strategy.enabled ? '停用' : '启用'
+                      }
                     />
                   </div>
                   <div className="row-actions">
-                    <button
-                      className="icon"
-                      title="编辑"
-                      aria-label="编辑"
-                      onClick={() => openEdit(strategy)}
-                    >
-                      <PencilIcon size={12} />
-                    </button>
-                    <button
-                      className="icon danger"
-                      title="删除"
-                      aria-label="删除"
-                      onClick={() => setDeleteTarget(strategy)}
-                    >
-                      <TrashIcon size={12} />
-                    </button>
+                    {mock ? (
+                      <span className="mock-badge">自动模拟</span>
+                    ) : (
+                      <>
+                        <button
+                          className="icon"
+                          title="编辑"
+                          aria-label="编辑"
+                          onClick={() => openEdit(strategy)}
+                        >
+                          <PencilIcon size={12} />
+                        </button>
+                        <button
+                          className="icon danger"
+                          title="删除"
+                          aria-label="删除"
+                          onClick={() => setDeleteTarget(strategy)}
+                        >
+                          <TrashIcon size={12} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );

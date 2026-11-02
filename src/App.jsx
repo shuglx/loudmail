@@ -325,6 +325,18 @@ export default function App() {
       if (disposed) unlisten();
       else unlisteners.push(unlisten);
     });
+    // mock 开关会增删临时策略：后端直接通知列表刷新
+    listen('strategies://changed', () => {
+      api
+        .listStrategies()
+        .then((list) => {
+          if (!disposed) setStrategies(list);
+        })
+        .catch(() => {});
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlisteners.push(unlisten);
+    });
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());

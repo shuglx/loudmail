@@ -278,7 +278,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                 <b>
                   模拟邮箱 <span className="dev-warn">[仅限开发人员调试]</span>
                 </b>
-                <small>不连接真实MCP而是模拟返回数据</small>
+                <small>不连接真实MCP，自动在策略列表最前插入一条 [mock] 模拟策略</small>
               </div>
               <Switch
                 checked={config.behavior.mock}

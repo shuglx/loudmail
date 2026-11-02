@@ -2759,9 +2759,6 @@ button.ringtone-item {
   width: 86px;
   flex-shrink: 0;
 }
-.debug-query .debug-window {
-  width: 104px;
-}
 /* 「测试接口」弹窗：收发报文 */
 .debug-block {
   display: flex;

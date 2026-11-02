@@ -142,9 +142,6 @@ pub fn load_config(paths: &AppPaths) -> AppConfig {
     if ![60, 120, 180].contains(&cfg.scan.interval_sec) {
         cfg.scan.interval_sec = 60;
     }
-    if ![10, 30, 60].contains(&cfg.scan.lookback_min) {
-        cfg.scan.lookback_min = 10;
-    }
     if !["light", "dark"].contains(&cfg.theme.as_str()) {
         cfg.theme = "light".into();
     }

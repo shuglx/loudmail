@@ -99,7 +99,6 @@ pub struct McpConfig {
 #[serde(rename_all = "camelCase")]
 pub struct ScanConfig {
     pub interval_sec: u64,
-    pub lookback_min: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -117,10 +116,7 @@ impl Default for AppConfig {
                 host: "127.0.0.1".into(),
                 port: 11328,
             },
-            scan: ScanConfig {
-                interval_sec: 60,
-                lookback_min: 10,
-            },
+            scan: ScanConfig { interval_sec: 60 },
             behavior: BehaviorConfig {
                 autostart: false,
                 mock: false,

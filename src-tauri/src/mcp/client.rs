@@ -19,6 +19,9 @@ enum SseEvent {
     Closed(String),
 }
 
+/// mail_search 的检索下界：服务端并不严格按时间过滤，固定传一个足够早的时间即「不限」
+pub const SEARCH_START_UNLIMITED: &str = "20000101000000";
+
 struct SseSession {
     rx: Receiver<SseEvent>,
     endpoint: String,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State};
 
-use chrono::{Duration as ChronoDuration, Local};
+use chrono::Local;
 
 use crate::logfile;
 use crate::mcp;
@@ -32,9 +32,6 @@ pub fn cmd_set_config(
     }
     if ![60, 120, 180].contains(&config.scan.interval_sec) {
         return Err("扫描间隔仅支持 1 / 2 / 3 分钟".into());
-    }
-    if ![10, 30, 60].contains(&config.scan.lookback_min) {
-        return Err("检索时间窗仅支持 10 / 30 / 60 分钟".into());
     }
     if !["light", "dark"].contains(&config.theme.as_str()) {
         return Err("主题仅支持 light / dark".into());
@@ -165,35 +162,27 @@ pub fn cmd_test_search(
     state: State<'_, Arc<AppState>>,
     keyword: String,
     limit: u32,
-    all_time: bool,
 ) -> DebugSearchResult {
-    let (host, port, lookback_min, mock) = match state.config.read() {
+    let (host, port, mock) = match state.config.read() {
         Ok(config) => (
             config.mcp.host.clone(),
             config.mcp.port,
-            config.scan.lookback_min,
             config.behavior.mock,
         ),
-        Err(_) => ("127.0.0.1".to_string(), 11328, 30, false),
+        Err(_) => ("127.0.0.1".to_string(), 11328, false),
     };
     let end = Local::now();
-    let start = end - ChronoDuration::minutes(lookback_min as i64);
-    // all_time=true 表示「不限」：下界给一个足够早的时间，仍显式传起止时间
-    let start_time = if all_time {
-        "20000101000000".to_string()
-    } else {
-        start.format("%Y%m%d%H%M%S").to_string()
-    };
     let end_time = end.format("%Y%m%d%H%M%S").to_string();
-    logfile::info(format!(
-        "[测试接口] keyword={keyword} limit={limit} window={}",
-        if all_time {
-            format!("不限~{end_time}")
-        } else {
-            format!("{start_time}~{end_time}")
-        }
-    ));
-    let result = mcp::search_debug(&host, port, &keyword, &start_time, &end_time, limit, mock);
+    logfile::info(format!("[测试接口] keyword={keyword} limit={limit} window=不限~{end_time}"));
+    let result = mcp::search_debug(
+        &host,
+        port,
+        &keyword,
+        mcp::SEARCH_START_UNLIMITED,
+        &end_time,
+        limit,
+        mock,
+    );
     // 显式「发起测试」：同样以这次结果刷新运行状态
     let mut next = state
         .runtime

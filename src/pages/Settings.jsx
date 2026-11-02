@@ -16,7 +16,6 @@ export default function Settings({ config, status, flash, onConfigChange }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [limit, setLimit] = useState(3);
-  const [allTime, setAllTime] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState(null);
   const [appInfo, setAppInfo] = useState(null);
@@ -84,7 +83,7 @@ export default function Settings({ config, status, flash, onConfigChange }) {
     setSearching(true);
     setSearchResult(null);
     try {
-      setSearchResult(await api.testSearch(value, limit, allTime));
+      setSearchResult(await api.testSearch(value, limit));
     } catch (e) {
       setSearchResult({ ok: false, ms: 0, request: '', response: '', error: String(e) });
     } finally {
@@ -272,21 +271,6 @@ export default function Settings({ config, status, flash, onConfigChange }) {
                   { value: 180, label: '3 分钟' },
                 ]}
                 onChange={(value) => saveConfig({ scan: { ...config.scan, intervalSec: value } })}
-              />
-            </div>
-            <div className="setting-row">
-              <div className="label">
-                <b>检索时间窗</b>
-                <small>每次轮询检索最近多久的邮件</small>
-              </div>
-              <Select
-                value={config.scan.lookbackMin}
-                options={[
-                  { value: 10, label: '10 分钟' },
-                  { value: 30, label: '30 分钟' },
-                  { value: 60, label: '60 分钟' },
-                ]}
-                onChange={(value) => saveConfig({ scan: { ...config.scan, lookbackMin: value } })}
               />
             </div>
             <div className="setting-row">
@@ -501,15 +485,6 @@ export default function Settings({ config, status, flash, onConfigChange }) {
               value={keyword}
               placeholder="例如 SOC"
               onChange={(e) => setKeyword(e.target.value)}
-            />
-            <Select
-              className="debug-window"
-              value={allTime}
-              options={[
-                { value: false, label: '跟随设置' },
-                { value: true, label: '不限' },
-              ]}
-              onChange={setAllTime}
             />
             <Select
               className="debug-limit"

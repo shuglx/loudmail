@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use chrono::{Duration as ChronoDuration, Local};
+use chrono::Local;
 
 use crate::logfile;
 use crate::mcp::mock::{self, MockSource};
-use crate::mcp::CoremailClient;
+use crate::mcp::{CoremailClient, SEARCH_START_UNLIMITED};
 use crate::models::*;
 use crate::state::AppState;
 use crate::store;
@@ -99,10 +99,9 @@ fn scan(
         return Ok(());
     }
 
-    let end = Local::now();
-    let start = end - ChronoDuration::minutes(config.scan.lookback_min as i64);
-    let start_time = start.format("%Y%m%d%H%M%S").to_string();
-    let end_time = end.format("%Y%m%d%H%M%S").to_string();
+    // 服务端 mail_search 并不严格按时间过滤；统一传「不限」下界，
+    // 旧的检索时间窗配置已移除，否则只会造成"看起来限了、实际没限"的错觉
+    let end_time = Local::now().format("%Y%m%d%H%M%S").to_string();
     // 恢复播报后的首轮扫描：只更新游标，不补播暂停期间的邮件
     let skip_backlog = state.skip_backlog.swap(false, Ordering::Relaxed);
 
@@ -132,7 +131,7 @@ fn scan(
             mock: true,
         });
         for strategy in &enabled {
-            match source.search(&strategy.keyword, &start_time, &end_time, 200) {
+            match source.search(&strategy.keyword, SEARCH_START_UNLIMITED, &end_time, 200) {
                 Ok(items) => process_strategy(state, strategy, items, skip_backlog),
                 Err(e) => logfile::error(format!("模拟数据查询失败: {e}")),
             }
@@ -176,7 +175,7 @@ fn scan(
         let mut result = client
             .as_mut()
             .ok_or_else(|| "MCP 客户端未连接".to_string())
-            .and_then(|c| c.search(&strategy.keyword, &start_time, &end_time, 200));
+            .and_then(|c| c.search(&strategy.keyword, SEARCH_START_UNLIMITED, &end_time, 200));
 
         // SSE 长连接会被服务端按空闲回收：失败时重连一次再重试，
         // 避免一次瞬时断流就把状态打回"不可达"
@@ -198,7 +197,7 @@ fn scan(
                     result = client
                         .as_mut()
                         .ok_or_else(|| "MCP 客户端未连接".to_string())
-                        .and_then(|c| c.search(&strategy.keyword, &start_time, &end_time, 200));
+                        .and_then(|c| c.search(&strategy.keyword, SEARCH_START_UNLIMITED, &end_time, 200));
                 }
                 Err(e) => {
                     failure = Some(format!("重连失败: {e}"));
@@ -226,18 +225,36 @@ fn scan(
 }
 
 fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>, skip_backlog: bool) {
-    let max_seq = items
+    // 发件人必填，按「包含」模糊匹配（地址已从 <...> 提取并转小写）
+    let sender_expected = strategy.sender.trim().to_lowercase();
+    let matcher = build_matcher(strategy);
+    // 服务端 mail_search 是宽松的全文匹配，会带回标题并不匹配的邮件（甚至序号更高）。
+    // 游标只能取自客户端校验通过的邮件，否则这些非目标邮件会把游标推过真实告警。
+    let matched: Vec<&MailItem> = items
         .iter()
-        .filter_map(|m| m.seq())
-        .max()
-        .unwrap_or(0);
+        .filter(|mail| matches_strategy(strategy, mail, &matcher, &sender_expected))
+        .collect();
+    let raw_max_seq = items.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
+    let max_seq = matched.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
+    let ignored_note = || {
+        let ignored = items.len().saturating_sub(matched.len());
+        if raw_max_seq > max_seq && ignored > 0 {
+            format!("（已忽略 {ignored} 条未通过校验的邮件，其中最大序号 {raw_max_seq}）")
+        } else {
+            String::new()
+        }
+    };
 
     if skip_backlog {
         let next = max_seq.max(strategy.cursor_seq.unwrap_or(0));
         set_cursor(state, &strategy.id, next);
         logfile::info(format!(
-            "策略「{}」恢复播报，跳过暂停期间的邮件，游标推进到 {}",
-            strategy.name, next
+            "策略「{}」恢复播报，跳过暂停期间的邮件，游标推进到 {}（返回 {} 条，命中 {} 条）{}",
+            strategy.name,
+            next,
+            items.len(),
+            matched.len(),
+            ignored_note()
         ));
         return;
     }
@@ -247,34 +264,24 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         None => {
             set_cursor(state, &strategy.id, max_seq);
             logfile::info(format!(
-                "策略「{}」初始化游标为 {}",
-                strategy.name, max_seq
+                "策略「{}」初始化游标为 {}（返回 {} 条，命中 {} 条）{}",
+                strategy.name,
+                max_seq,
+                items.len(),
+                matched.len(),
+                ignored_note()
             ));
             return;
         }
     };
 
-    let sender_expected = strategy.sender.trim().to_lowercase();
-    let matcher = build_matcher(strategy);
-    let mut candidates: Vec<MailItem> = items
+    let mut candidates: Vec<MailItem> = matched
         .iter()
-        .filter(|mail| {
-            let seq = mail.seq().unwrap_or(0);
-            if seq <= cursor {
-                return false;
-            }
-            // 发件人必填，按「包含」模糊匹配（地址已从 <...> 提取并转小写）
-            if !sender_expected.is_empty() && !mail.sender_email().contains(&sender_expected) {
-                return false;
-            }
-            if strategy.filter_replies && is_reply_or_forward(&mail.subject) {
-                return false;
-            }
-            matcher.is_match(&mail.subject)
-        })
-        .cloned()
+        .filter(|mail| mail.seq().unwrap_or(0) > cursor)
+        .map(|mail| (*mail).clone())
         .collect();
     candidates.sort_by_key(|m| m.seq().unwrap_or(0));
+    let mut skipped_seen = 0usize;
 
     let sound = strategy
         .sound_id
@@ -292,6 +299,7 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
             .map(|seen| seen.contains(&mail_id))
             .unwrap_or(false)
         {
+            skipped_seen += 1;
             continue;
         }
         let Some(sound) = sound.as_ref() else {
@@ -351,7 +359,26 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         ));
     }
 
-    set_cursor(state, &strategy.id, max_seq.max(cursor));
+    if skipped_seen > 0 {
+        logfile::info(format!(
+            "[匹配] 策略「{}」跳过 {} 条已播报过的邮件",
+            strategy.name, skipped_seen
+        ));
+    }
+
+    let next = max_seq.max(cursor);
+    set_cursor(state, &strategy.id, next);
+    if next != cursor {
+        logfile::info(format!(
+            "[匹配] 策略「{}」返回 {} 条，命中 {} 条，游标 {} -> {}{}",
+            strategy.name,
+            items.len(),
+            matched.len(),
+            cursor,
+            next,
+            ignored_note()
+        ));
+    }
 }
 
 /// 未确认的「人工确认」记录：每轮轮询重新入队播报，并把记录移到列表最前。
@@ -486,6 +513,23 @@ fn build_matcher(strategy: &Strategy) -> Matcher {
         "suffix" => Matcher::Suffix(keyword),
         _ => Matcher::Contains(keyword),
     }
+}
+
+/// 客户端校验：发件人包含 + 转发/回复过滤 + 标题匹配。
+/// 游标推进与命中候选共用这一套判断，保证"被跳过的非目标邮件"不会影响游标。
+fn matches_strategy(
+    strategy: &Strategy,
+    mail: &MailItem,
+    matcher: &Matcher,
+    sender_expected: &str,
+) -> bool {
+    if !sender_expected.is_empty() && !mail.sender_email().contains(sender_expected) {
+        return false;
+    }
+    if strategy.filter_replies && is_reply_or_forward(&mail.subject) {
+        return false;
+    }
+    matcher.is_match(&mail.subject)
 }
 
 /// 标题是否以「转发 / 回复 + 中英文冒号」开头（允许前导空白、冒号前空格）

@@ -61,5 +61,14 @@ Description: LoudMail email arrival alarm for Kylin V10 (arm64)
  邮件到达报警：按匹配策略轮询邮箱，命中后播放报警语音。
 EOF
 
-dpkg-deb --build --root-owner-group "$STAGE" "$OUT"
+# 必须显式指定 xz：CI 的 ubuntu-24.04 宿主机 dpkg 1.22 默认用 zstd 压缩
+# （control.tar.zst / data.tar.zst），而麒麟 V10 的 dpkg 1.19 不认识 zstd，
+# 会导致签名工具和 dpkg -i 在解包时报「使用了未知的压缩」。
+dpkg-deb --build -Zxz --root-owner-group "$STAGE" "$OUT"
+
+# 兜底校验：产物里一旦出现 *.zst 成员，直接在打包阶段失败
+if ar t "$OUT" | grep -q '\.zst$'; then
+  echo "错误: $OUT 使用了 zstd 压缩，麒麟 V10 的 dpkg 无法解析" >&2
+  exit 1
+fi
 echo "打包完成: $OUT"

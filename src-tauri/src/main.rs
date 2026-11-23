@@ -27,6 +27,28 @@ use tauri::{
 
 use state::AppState;
 
+/// Wayland 会话下 tao + WebKitGTK 的兼容设置（实测两项缺一不可）。
+///
+/// - `GDK_BACKEND=x11`：GTK 走 XWayland，避开 Wayland 后端下透明无边框窗口的问题；
+/// - `WEBKIT_DISABLE_COMPOSITING_MODE=1`：部分机器 GPU/EGL 路径异常时，WebKit 的
+///   加速合成会把网页画成全透明，禁用后退回软件合成即可正常显示。
+///
+/// 必须在任何 GTK 调用之前设置，故在 main() 的第一行执行；仅在同时存在
+/// WAYLAND_DISPLAY 与 DISPLAY（即 Wayland 会话自带 XWayland）时生效。
+#[cfg(target_os = "linux")]
+fn apply_wayland_compat_env() -> bool {
+    if std::env::var_os("WAYLAND_DISPLAY").is_none() || std::env::var_os("DISPLAY").is_none() {
+        return false;
+    }
+    if std::env::var_os("GDK_BACKEND").is_none() {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
+    if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+    true
+}
+
 pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_window("main") {
         let _ = window.show();
@@ -113,6 +135,10 @@ fn hide_empty_gtk_menubar(app: &AppHandle) {
 }
 
 fn main() {
+    // 必须在 GTK 初始化前生效，故放在 main 最前面
+    #[cfg(target_os = "linux")]
+    let wayland_compat = apply_wayland_compat_env();
+
     let tray_menu = SystemTrayMenu::new()
         .add_item(CustomMenuItem::new("show", "显示主窗口"))
         .add_native_item(SystemTrayMenuItem::Separator)
@@ -141,7 +167,7 @@ fn main() {
             SystemTrayEvent::DoubleClick { .. } => show_main(app),
             _ => {}
         })
-        .setup(|app| {
+        .setup(move |app| {
             let root = std::env::var_os("LOUDMAIL_DATA_DIR")
                 .map(PathBuf::from)
                 .or_else(|| app.path_resolver().app_data_dir())
@@ -156,6 +182,12 @@ fn main() {
             logfile::init(&paths.logs_dir, &app.package_info().version.to_string());
             logfile::install_panic_hook();
             logfile::info(format!("数据目录: {}", paths.root.display()));
+            #[cfg(target_os = "linux")]
+            if wayland_compat {
+                logfile::info(
+                    "[窗口] 检测到 Wayland 会话，已启用兼容设置(GDK_BACKEND=x11, WEBKIT_DISABLE_COMPOSITING_MODE=1)",
+                );
+            }
 
             if !system::acquire_single_instance(app.handle().clone()) {
                 logfile::info("[启动] 检测到已有实例，已请求其显示窗口");

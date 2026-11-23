@@ -27,25 +27,19 @@ use tauri::{
 
 use state::AppState;
 
-/// Wayland 会话下 tao + WebKitGTK 的兼容设置（实测两项缺一不可）。
+/// Wayland 会话下 WebKitGTK 的兼容设置：部分机器 GPU/EGL 路径异常时，
+/// WebKit 的加速合成会把窗口画成全透明，禁用后退回软件合成即可正常显示。
+/// 实测只这一项就够，无需强制 GTK 走 XWayland（保留原生 Wayland 的清晰度）。
 ///
-/// - `GDK_BACKEND=x11`：GTK 走 XWayland，避开 Wayland 后端下透明无边框窗口的问题；
-/// - `WEBKIT_DISABLE_COMPOSITING_MODE=1`：部分机器 GPU/EGL 路径异常时，WebKit 的
-///   加速合成会把网页画成全透明，禁用后退回软件合成即可正常显示。
-///
-/// 必须在任何 GTK 调用之前设置，故在 main() 的第一行执行；仅在同时存在
-/// WAYLAND_DISPLAY 与 DISPLAY（即 Wayland 会话自带 XWayland）时生效。
+/// 必须在任何 GTK 调用之前设置，故在 main() 的第一行执行。
 #[cfg(target_os = "linux")]
 fn apply_wayland_compat_env() -> bool {
-    if std::env::var_os("WAYLAND_DISPLAY").is_none() || std::env::var_os("DISPLAY").is_none() {
+    if std::env::var_os("WAYLAND_DISPLAY").is_none()
+        || std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some()
+    {
         return false;
     }
-    if std::env::var_os("GDK_BACKEND").is_none() {
-        std::env::set_var("GDK_BACKEND", "x11");
-    }
-    if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-    }
+    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     true
 }
 
@@ -185,7 +179,7 @@ fn main() {
             #[cfg(target_os = "linux")]
             if wayland_compat {
                 logfile::info(
-                    "[窗口] 检测到 Wayland 会话，已启用兼容设置(GDK_BACKEND=x11, WEBKIT_DISABLE_COMPOSITING_MODE=1)",
+                    "[窗口] 检测到 Wayland 会话，已禁用 WebKit 加速合成(WEBKIT_DISABLE_COMPOSITING_MODE=1)",
                 );
             }
 

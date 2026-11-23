@@ -164,7 +164,10 @@ jobs:
 
   # ---------------------------------------------------------------- macOS(M 系列)
   build-dmg:
-    runs-on: macos-14 # Apple Silicon(M 系列)，无需交叉编译
+    # macos-14 的 arm64 配置在部分账户下已不可用
+    # ("The configuration 'macos-14-arm64-us-default' is not supported")，
+    # 改用当前受支持的 Apple Silicon 镜像
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 

@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Select from '../components/Select';
-import { SearchIcon, TrashIcon } from '../icons';
+import { CheckIcon, SearchIcon, TrashIcon } from '../icons';
+
+/// 待人工确认（开启人工确认且尚未确认）
+const isPending = (record) => Boolean(record.requireConfirm) && !record.confirmed;
 
 function pageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -38,6 +41,9 @@ export default function History({ history, flash, onCleared }) {
   const [page, setPage] = useState(1);
   // 只存 id，记录本身从 history 里取，确认/重复播报后详情自动跟着更新
   const [selectedId, setSelectedId] = useState(null);
+  // 批量确认勾选：只存 id，跨页保留
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
+  const selectAllRef = useRef(null);
   const [clearOpen, setClearOpen] = useState(false);
 
   const strategyNames = useMemo(
@@ -65,6 +71,50 @@ export default function History({ history, flash, onCleared }) {
   const from = total === 0 ? 0 : start + 1;
   const to = Math.min(start + pageSize, total);
   const selected = history.find((record) => record.id === selectedId) || null;
+
+  // 全选框只覆盖当前筛选结果里的待确认记录，切换搜索/策略筛选后自然失效
+  const pendingRecords = useMemo(() => filtered.filter(isPending), [filtered]);
+  const checkedPending = useMemo(
+    () => pendingRecords.filter((record) => checkedIds.has(record.id)),
+    [pendingRecords, checkedIds]
+  );
+  const allChecked = pendingRecords.length > 0 && checkedPending.length === pendingRecords.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate =
+        checkedPending.length > 0 && !allChecked;
+    }
+  }, [checkedPending.length, allChecked]);
+
+  const toggleCheck = (id, checked) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleCheckAll = () => {
+    setCheckedIds(allChecked ? new Set() : new Set(pendingRecords.map((record) => record.id)));
+  };
+
+  const confirmBatch = async () => {
+    const ids = checkedPending.map((record) => record.id);
+    if (!ids.length) return;
+    try {
+      const count = await api.confirmHistoryBatch(ids);
+      setCheckedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      flash(count ? `已批量确认 ${count} 条` : '没有待确认的记录');
+    } catch (e) {
+      flash(String(e));
+    }
+  };
 
   const setQueryAndReset = (value) => {
     setQuery(value);
@@ -142,6 +192,15 @@ export default function History({ history, flash, onCleared }) {
           ]}
           onChange={setPageSizeAndReset}
         />
+        <button
+          className="btn btn-green"
+          disabled={checkedPending.length === 0}
+          title="确认勾选的待确认记录，确认后不再重复播报"
+          onClick={confirmBatch}
+        >
+          <CheckIcon />
+          批量确认{checkedPending.length ? ` (${checkedPending.length})` : ''}
+        </button>
         <span className="toolbar-note">滚动保留最新 1000 条，待确认记录不受限</span>
       </div>
 
@@ -181,6 +240,18 @@ export default function History({ history, flash, onCleared }) {
 
       <div className="panel">
         <div className="table-head history-head">
+          <span className="history-check">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              className="row-check"
+              checked={allChecked}
+              disabled={pendingRecords.length === 0}
+              title="全选当前筛选结果中的待确认记录"
+              aria-label="全选待确认记录"
+              onChange={toggleCheckAll}
+            />
+          </span>
           <span>命中时间</span>
           <span>命中策略</span>
           <span>邮件信息</span>
@@ -216,6 +287,20 @@ export default function History({ history, flash, onCleared }) {
               }}
             >
               <span className="history-grid">
+                <span
+                  className="history-check"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {isPending(record) ? (
+                    <input
+                      type="checkbox"
+                      className="row-check"
+                      checked={checkedIds.has(record.id)}
+                      aria-label="选择该待确认记录"
+                      onChange={(event) => toggleCheck(record.id, event.target.checked)}
+                    />
+                  ) : null}
+                </span>
                 <span className="history-time">
                   <span className="history-date">{record.time.slice(5, 16)}</span>
                   {overdue ? (
@@ -230,16 +315,26 @@ export default function History({ history, flash, onCleared }) {
                   {record.strategyName}
                 </span>
                 <span className="history-main">
-                  <b
-                    title={
-                      record.rebroadcastCount > 0
-                        ? `${record.subject}（已重复播报 ${record.rebroadcastCount} 次，未在第一时间确认）`
-                        : record.subject
-                    }
-                  >
-                    {record.subject}
-                  </b>
-                  <span>{record.sender}</span>
+                  <span className="history-subject">
+                    <b
+                      title={
+                        record.rebroadcastCount > 0
+                          ? `${record.subject}（已重复播报 ${record.rebroadcastCount} 次，未在第一时间确认）`
+                          : record.subject
+                      }
+                    >
+                      {record.subject}
+                    </b>
+                    {record.mergedCount > 1 ? (
+                      <span
+                        className="tag merge-count"
+                        title={`本轮扫描合并了 ${record.mergedCount} 条发件人和标题完全相同的邮件`}
+                      >
+                        × {record.mergedCount}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="history-sender">{record.sender}</span>
                 </span>
                 <span className="history-confirm">
                   {record.requireConfirm && !record.confirmed ? (

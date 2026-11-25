@@ -17,6 +17,7 @@ export const api = {
   listHistory: () => invoke('cmd_list_history'),
   clearHistory: () => invoke('cmd_clear_history'),
   confirmHistory: (id) => invoke('cmd_confirm_history', { id }),
+  confirmHistoryBatch: (ids) => invoke('cmd_confirm_history_batch', { ids }),
   listSounds: () => invoke('cmd_list_sounds'),
   pickAudioFile: () => invoke('cmd_pick_audio_file'),
   importSound: (path, name) => invoke('cmd_import_sound', { path, name }),

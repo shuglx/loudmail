@@ -576,6 +576,16 @@ button:focus {
   background: var(--red-bg);
   border-color: #edb5b0;
 }
+/* 绿色按钮：与列表中「已确认」按钮同色 */
+.btn-green {
+  border-color: #b9e3d0;
+  background: var(--green-bg);
+  color: var(--green);
+}
+.btn-green:hover {
+  background: #d8f0e5;
+  border-color: #a5dcc3;
+}
 .btn-sm {
   height: 27px;
   padding: 0 9px;
@@ -1164,10 +1174,10 @@ code.keyword {
   cursor: pointer;
   transition: background 0.12s;
 }
-/* 表头与行共用同一套列宽（1:1:2:1:1），保证对齐 */
+/* 表头与行共用同一套列宽（勾选框 + 1:1:2:1:1），保证对齐 */
 .history-grid,
 .history-head {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) minmax(
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) minmax(
       0,
       1fr
     );
@@ -1238,7 +1248,7 @@ code.keyword {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.history-main span {
+.history-main .history-sender {
   display: block;
   font-size: 11px;
   color: var(--muted);
@@ -1247,11 +1257,52 @@ code.keyword {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 勾选框列：行内与表头都居中 */
+.history-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.row-check {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+.row-check[disabled] {
+  cursor: default;
+  opacity: 0.4;
+}
+/* 标题与「合并同名邮件」计数小标同一行：标题过长时省略，小标始终可见 */
+.history-main .history-subject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.history-subject b {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.history-subject .tag.merge-count {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 17px;
+  margin-left: 5px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 /* 错过第一时间确认（已重复播报且仍未确认）：时间、策略、标题、发件人一起标红 */
 .history-row.overdue .history-time,
 .history-row.overdue .history-strategy,
 .history-row.overdue .history-main b,
-.history-row.overdue .history-main span {
+.history-row.overdue .history-main .history-sender {
+  color: var(--red);
+}
+/* 重复提醒的记录：标题后的「× N」合并计数小标同步标红 */
+.history-row.overdue .history-subject .tag.merge-count {
+  background: var(--red-bg);
   color: var(--red);
 }
 .history-confirm {
@@ -2881,6 +2932,15 @@ button.ringtone-item {
 :root[data-theme='dark'] .btn-danger:hover {
   border-color: rgba(255, 123, 114, 0.6);
   background: var(--red-bg);
+}
+/* 暗色下与列表「已确认」按钮保持一致 */
+:root[data-theme='dark'] .btn-green {
+  border-color: #234238;
+  color: var(--green);
+}
+:root[data-theme='dark'] .btn-green:hover {
+  background: #1b3b31;
+  border-color: #2f5a4b;
 }
 :root[data-theme='dark'] .icon-btn:hover {
   color: var(--text);

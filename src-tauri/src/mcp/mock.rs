@@ -8,12 +8,15 @@ const MAX_MAILS: usize = 500;
 pub const BASE_SEQ: u64 = 21598;
 /// 模拟邮件的序号空间前缀：与真实邮箱的序号各自独立比较
 pub const SOURCE: &str = "mock";
+/// 每轮轮询生成的邮件条数：同一发件人 + 同一标题，用于验证「合并同名的高频邮件」
+pub const BATCH: u64 = 2;
 /// 模拟策略使用的固定发件人与标题关键词：与真实业务邮件刻意区分，避免误命中
 pub const EMAIL: &str = "mock@loudmail.dev";
 pub const SENDER: &str = "\"LoudMail Mock\" <mock@loudmail.dev>";
 pub const KEYWORD: &str = "[MOCK] 模拟测试告警";
 
-/// 模拟邮箱：每轮轮询追加一封 [MOCK] 模拟告警，便于联调「匹配 → 播报 → 确认」整条链路
+/// 模拟邮箱：每轮轮询追加 2 封发件人、标题完全相同的模拟告警，
+/// 便于联调「匹配 → 合并同名高频邮件 → 播报 → 确认」整条链路
 pub struct MockSource {
     mails: Vec<MailItem>,
     next_seq: u64,
@@ -30,9 +33,9 @@ impl MockSource {
         }
     }
 
-    /// 每轮轮询调用一次：生成一封新的 SOC 告警
+    /// 每轮轮询调用一次：生成一批同一发件人、同一标题的 SOC 告警
     pub fn tick(&mut self) {
-        self.emit_soc();
+        self.emit_soc_batch();
     }
 
     pub fn search(
@@ -63,16 +66,22 @@ impl MockSource {
         Ok(matched)
     }
 
-    fn emit_soc(&mut self) {
+    fn emit_soc_batch(&mut self) {
         let seq = self.next_seq;
-        self.next_seq += 1;
+        self.next_seq += BATCH;
         let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        self.mails.push(MailItem {
-            mail_id: format!("{SOURCE}:{seq}"),
-            sender: SENDER.into(),
-            subject: format!("{KEYWORD} #{seq}"),
-            summary: format!("这是 LoudMail 模拟数据，不来自真实邮箱。模拟时间 {now}"),
-        });
+        // 同一批次共用一个标题（只带批次的起始序号），发件人也相同：
+        // 「合并同名的高频邮件」开启时，这一批只会产生一条播报记录
+        let subject = format!("{KEYWORD} #{seq}");
+        let summary = format!("这是 LoudMail 模拟数据，不来自真实邮箱。模拟时间 {now}");
+        for offset in 0..BATCH {
+            self.mails.push(MailItem {
+                mail_id: format!("{SOURCE}:{}", seq + offset),
+                sender: SENDER.into(),
+                subject: subject.clone(),
+                summary: summary.clone(),
+            });
+        }
         if self.mails.len() > MAX_MAILS {
             let overflow = self.mails.len() - MAX_MAILS;
             self.mails.drain(..overflow);
@@ -82,7 +91,7 @@ impl MockSource {
 
 #[cfg(test)]
 mod tests {
-    use super::{MockSource, BASE_SEQ, KEYWORD, SOURCE};
+    use super::{MockSource, BATCH, BASE_SEQ, KEYWORD, SOURCE};
 
     fn search(source: &MockSource, pattern: &str, limit: u32) -> Vec<super::MailItem> {
         source.search(pattern, "", "", limit).unwrap()
@@ -93,7 +102,7 @@ mod tests {
         let mut source = MockSource::new(900_000);
         source.tick();
         let items = search(&source, KEYWORD, 10);
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), BATCH as usize);
         assert_eq!(items[0].mail_id, format!("{SOURCE}:900000"));
     }
 
@@ -105,16 +114,20 @@ mod tests {
         assert_eq!(items[0].mail_id, format!("{SOURCE}:{BASE_SEQ}"));
     }
 
+    /// 每轮生成的一批邮件发件人、标题完全相同，序号各自唯一（用于合并播报）
     #[test]
-    fn one_tick_produces_exactly_one_mail() {
+    fn one_tick_produces_a_batch_of_identical_mails() {
         let mut source = MockSource::new(900_000);
         assert!(search(&source, KEYWORD, 10).is_empty());
         source.tick();
         let items = search(&source, KEYWORD, 10);
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), BATCH as usize);
         assert_eq!(items[0].mail_id, format!("{SOURCE}:900000"));
+        assert_eq!(items[1].mail_id, format!("{SOURCE}:900001"));
         assert!(items[0].sender.contains("mock@loudmail.dev"));
         assert!(items[0].subject.contains(KEYWORD));
+        assert_eq!(items[0].sender, items[1].sender);
+        assert_eq!(items[0].subject, items[1].subject);
     }
 
     #[test]
@@ -125,7 +138,7 @@ mod tests {
         }
         let items = search(&source, KEYWORD, 3);
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].mail_id, format!("{SOURCE}:900002"));
-        assert_eq!(items[2].mail_id, format!("{SOURCE}:900004"));
+        assert_eq!(items[0].mail_id, format!("{SOURCE}:900007"));
+        assert_eq!(items[2].mail_id, format!("{SOURCE}:900009"));
     }
 }

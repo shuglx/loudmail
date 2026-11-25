@@ -226,6 +226,7 @@ fn main() {
             commands::history::cmd_list_history,
             commands::history::cmd_clear_history,
             commands::history::cmd_confirm_history,
+            commands::history::cmd_confirm_history_batch,
             commands::sounds::cmd_list_sounds,
             commands::sounds::cmd_pick_audio_file,
             commands::sounds::cmd_import_sound,

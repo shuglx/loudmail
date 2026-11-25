@@ -32,6 +32,7 @@ const emptyForm = {
   keyword: '',
   matchMode: 'contains',
   filterReplies: true,
+  mergeDuplicates: true,
   requireConfirm: false,
   soundId: '',
   playCount: 1,
@@ -67,6 +68,7 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
       keyword: strategy.keyword,
       matchMode: strategy.matchMode || 'contains',
       filterReplies: strategy.filterReplies !== false,
+      mergeDuplicates: strategy.mergeDuplicates !== false,
       requireConfirm: Boolean(strategy.requireConfirm),
       soundId: strategy.soundId || '',
       playCount: strategy.playCount || 1,
@@ -477,6 +479,16 @@ export default function Strategies({ strategies, sounds, flash, onRefresh }) {
           <p className="hint">
             服务端按关键词检索，本地再按所选方式校验标题（忽略大小写和首尾空格）
           </p>
+        </div>
+        <div className="field field-inline">
+          <div className="label">
+            合并同名的高频邮件
+            <small>在同一次扫描匹配中，合并发件人和标题完全相同的邮件，避免告警风暴</small>
+          </div>
+          <Switch
+            checked={form.mergeDuplicates}
+            onChange={(checked) => setForm({ ...form, mergeDuplicates: checked })}
+          />
         </div>
         <div className="field field-inline">
           <div className="label">

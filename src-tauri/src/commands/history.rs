@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use chrono::Local;
@@ -71,4 +72,43 @@ pub fn cmd_confirm_history(
         updated.strategy_name, updated.subject
     ));
     Ok(updated)
+}
+
+/// 批量人工确认：只处理「待人工确认且未确认」的记录，返回实际确认的条数
+#[tauri::command]
+pub fn cmd_confirm_history_batch(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let wanted: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    if wanted.is_empty() {
+        return Ok(0);
+    }
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let updated: Vec<HistoryRecord> = {
+        let mut history = state.history.write().map_err(|e| e.to_string())?;
+        let mut updated = Vec::new();
+        for item in history.iter_mut() {
+            if !wanted.contains(item.id.as_str()) || !item.require_confirm || item.confirmed {
+                continue;
+            }
+            item.confirmed = true;
+            item.confirmed_at = Some(now.clone());
+            updated.push(item.clone());
+        }
+        updated
+    };
+    if updated.is_empty() {
+        return Ok(0);
+    }
+    for item in &updated {
+        // 正在播的那一遍会播完，尚未开始的重播直接丢弃
+        state.player.cancel_tag(&item.id);
+    }
+    state.save_history()?;
+    for item in &updated {
+        state.emit_history_updated(item);
+    }
+    logfile::info(format!("批量人工确认播报记录 {} 条", updated.len()));
+    Ok(updated.len())
 }

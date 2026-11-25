@@ -27,6 +27,8 @@ pub fn start(state: Arc<AppState>) {
             .unwrap_or_else(Instant::now);
         // 语音已被删除/文件丢失的记录只提醒一次，避免每轮刷日志
         let mut warned_missing: HashSet<String> = HashSet::new();
+        // 「返回了邮件但一条都没通过标题校验」的诊断日志每个策略只打一次
+        let mut warned_mismatch: HashSet<String> = HashSet::new();
 
         loop {
             thread::sleep(Duration::from_millis(500));
@@ -63,7 +65,7 @@ pub fn start(state: Arc<AppState>) {
             last_scan = Instant::now();
             // 未确认的「人工确认」记录每轮都重新提醒，与邮箱连接状态无关
             rebroadcast_pending(&state, &mut warned_missing);
-            match scan(&state, &config, &mut client, &mut mock) {
+            match scan(&state, &config, &mut client, &mut mock, &mut warned_mismatch) {
                 Ok(()) => {
                     failures = 0;
                 }
@@ -86,6 +88,7 @@ fn scan(
     config: &AppConfig,
     client: &mut Option<CoremailClient>,
     mock: &mut Option<MockSource>,
+    warned_mismatch: &mut HashSet<String>,
 ) -> Result<(), String> {
     let enabled: Vec<Strategy> = state
         .strategies
@@ -106,22 +109,8 @@ fn scan(
     let skip_backlog = state.skip_backlog.swap(false, Ordering::Relaxed);
 
     if config.behavior.mock {
-        // 模拟邮件的序号必须接在「模拟空间」现有游标之后：游标是持久化的，而 mock 每次启动
-        // 都从 BASE_SEQ 重新计数，序号一旦落后于游标，新邮件会被当成旧邮件全部跳过
-        let start_seq = state
-            .strategies
-            .read()
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| item.cursor_seq.get(mock::SOURCE))
-                    .max()
-                    .map(|seq| seq + 1)
-                    .unwrap_or(mock::BASE_SEQ)
-            })
-            .unwrap_or(mock::BASE_SEQ);
-        let source = mock.get_or_insert_with(|| MockSource::new(start_seq));
-        // 每轮轮询生成一封新的 SOC 告警
+        let source = mock.get_or_insert_with(|| MockSource::new(mock_start_seq(state)));
+        // 每轮轮询生成一批（默认 2 封）发件人、标题完全相同的 SOC 告警
         source.tick();
         state.set_runtime(RuntimeStatus {
             connected: true,
@@ -132,7 +121,7 @@ fn scan(
         });
         for strategy in &enabled {
             match source.search(&strategy.keyword, SEARCH_START_UNLIMITED, &end_time, 200) {
-                Ok(items) => process_strategy(state, strategy, items, skip_backlog),
+                Ok(items) => process_strategy(state, strategy, items, skip_backlog, warned_mismatch),
                 Err(e) => logfile::error(format!("模拟数据查询失败: {e}")),
             }
         }
@@ -207,7 +196,7 @@ fn scan(
         }
 
         match result {
-            Ok(items) => process_strategy(state, strategy, items, skip_backlog),
+            Ok(items) => process_strategy(state, strategy, items, skip_backlog, warned_mismatch),
             Err(e) => {
                 failure = Some(e);
                 break;
@@ -224,7 +213,43 @@ fn scan(
     Ok(())
 }
 
-fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>, skip_backlog: bool) {
+/// 模拟邮件的起始序号：接在所有已知 mock 序号之后（策略游标 + 已播报过的邮件）。
+/// 模拟策略的游标不落盘，重启后只会回到 BASE_SEQ 之前；若只看游标，新生成的
+/// 模拟邮件会与历史记录里的 mail_id 撞车，被当成旧邮件跳过好几轮才恢复正常。
+fn mock_start_seq(state: &AppState) -> u64 {
+    let cursor_max = state
+        .strategies
+        .read()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.cursor_seq.get(mock::SOURCE))
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    let seen_max = state
+        .seen
+        .lock()
+        .map(|seen| {
+            seen.iter()
+                .filter_map(|id| id.rsplit_once(':'))
+                .filter(|(source, _)| *source == mock::SOURCE)
+                .filter_map(|(_, seq)| seq.parse::<u64>().ok())
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    cursor_max.max(seen_max) + 1
+}
+
+fn process_strategy(
+    state: &AppState,
+    strategy: &Strategy,
+    items: Vec<MailItem>,
+    skip_backlog: bool,
+    warned_mismatch: &mut HashSet<String>,
+) {
     // 发件人必填，按「包含」模糊匹配（地址已从 <...> 提取并转小写）
     let sender_expected = strategy.sender.trim().to_lowercase();
     let matcher = build_matcher(strategy);
@@ -234,6 +259,9 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         .iter()
         .filter(|mail| matches_strategy(strategy, mail, &matcher, &sender_expected))
         .collect();
+    // 服务端只做全文检索，标题不符合时不会有任何记录、游标也不会动：
+    // 这里把实际返回的标题样例打出来，便于定位「以此开头/结尾」等匹配方式的差异
+    warn_subject_mismatch(strategy, &items, &matched, &matcher, warned_mismatch);
     let raw_max_seq = items.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
     let max_seq = matched.iter().filter_map(|m| m.seq()).max().unwrap_or(0);
     // 按来源序号空间（mail_id 最后一个冒号之前的部分）分组：不同空间的序号互不可比
@@ -312,17 +340,25 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
         .as_ref()
         .map(|s| state.paths.sounds_dir.join(&s.file));
 
-    for mail in candidates {
-        let mail_id = mail.mail_id.clone();
-        if state
-            .seen
-            .lock()
-            .map(|seen| seen.contains(&mail_id))
-            .unwrap_or(false)
-        {
-            skipped_seen += 1;
-            continue;
+    // 先剔除已播报过的邮件，再按「发件人 + 标题」分组：
+    // 开启「合并同名的高频邮件」时，同一次扫描内完全相同的邮件只播报一条
+    let mut fresh: Vec<MailItem> = Vec::new();
+    {
+        let seen = state.seen.lock();
+        for mail in candidates {
+            match seen.as_ref() {
+                Ok(seen) if seen.contains(&mail.mail_id) => skipped_seen += 1,
+                _ => fresh.push(mail),
+            }
         }
+    }
+
+    let (groups, merged_extra) = group_duplicates(fresh, strategy.merge_duplicates);
+
+    for group in groups {
+        let Some(mail) = group.first() else { continue };
+        let mail_id = mail.mail_id.clone();
+        let merged_count = group.len() as u32;
         let Some(sound) = sound.as_ref() else {
             logfile::warn(format!(
                 "策略「{}」缺少语音，跳过邮件 {}",
@@ -354,6 +390,7 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
             sender: mail.sender.clone(),
             subject: mail.subject.clone(),
             summary: mail.summary.clone(),
+            merged_count,
             sound_name: sound.name.clone(),
             play_count,
             // 快照策略当前的人工确认设置：之后改策略不影响已经命中的记录
@@ -370,13 +407,30 @@ fn process_strategy(state: &AppState, strategy: &Strategy, items: Vec<MailItem>,
             store::cap_history(&mut history);
         }
         if let Ok(mut seen) = state.seen.lock() {
-            seen.insert(mail_id);
+            // 合并进来的邮件同样算作已播报，避免被后续策略重复播报
+            for item in &group {
+                seen.insert(item.mail_id.clone());
+            }
         }
         let _ = state.save_history();
         state.emit_history(&record);
         logfile::info(format!(
-            "命中播报: [{}] {} ({})",
-            strategy.name, record.subject, record.mail_id
+            "命中播报: [{}] {} ({}){}",
+            strategy.name,
+            record.subject,
+            record.mail_id,
+            if merged_count > 1 {
+                format!("，合并 {merged_count} 条同名邮件")
+            } else {
+                String::new()
+            }
+        ));
+    }
+
+    if merged_extra > 0 {
+        logfile::info(format!(
+            "[匹配] 策略「{}」合并了 {} 条同名高频邮件",
+            strategy.name, merged_extra
         ));
     }
 
@@ -503,6 +557,27 @@ fn rebroadcast_pending(state: &AppState, warned_missing: &mut HashSet<String>) {
     ));
 }
 
+/// 同一次扫描内的重复邮件分组：开启合并时按「发件人 + 标题」完全一致分组，
+/// 否则每条邮件各自成组。返回（分组, 被合并掉的条数）。
+fn group_duplicates(candidates: Vec<MailItem>, merge: bool) -> (Vec<Vec<MailItem>>, usize) {
+    let mut groups: Vec<Vec<MailItem>> = Vec::new();
+    let mut group_of: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut merged = 0usize;
+    for mail in candidates {
+        if merge {
+            let key = (mail.sender.clone(), mail.subject.clone());
+            if let Some(&index) = group_of.get(&key) {
+                groups[index].push(mail);
+                merged += 1;
+                continue;
+            }
+            group_of.insert(key, groups.len());
+        }
+        groups.push(vec![mail]);
+    }
+    (groups, merged)
+}
+
 fn set_cursor(state: &AppState, strategy_id: &str, cursor: CursorSeq) {
     if let Ok(mut strategies) = state.strategies.write() {
         if let Some(item) = strategies.iter_mut().find(|s| s.id == strategy_id) {
@@ -521,22 +596,81 @@ enum Matcher {
 
 impl Matcher {
     fn is_match(&self, subject: &str) -> bool {
-        let subject = subject.trim().to_lowercase();
+        let subject = normalize_title(subject);
         match self {
             Matcher::Contains(keyword) => subject.contains(keyword),
             Matcher::Prefix(keyword) => subject.starts_with(keyword),
             Matcher::Suffix(keyword) => subject.ends_with(keyword),
         }
     }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Matcher::Contains(_) => "模糊匹配",
+            Matcher::Prefix(_) => "以此开头",
+            Matcher::Suffix(_) => "以此结尾",
+        }
+    }
+
+    fn keyword(&self) -> &str {
+        match self {
+            Matcher::Contains(keyword) | Matcher::Prefix(keyword) | Matcher::Suffix(keyword) => {
+                keyword
+            }
+        }
+    }
 }
 
 fn build_matcher(strategy: &Strategy) -> Matcher {
-    let keyword = strategy.keyword.trim().to_lowercase();
+    let keyword = normalize_title(&strategy.keyword);
     match strategy.match_mode.as_str() {
         "prefix" => Matcher::Prefix(keyword),
         "suffix" => Matcher::Suffix(keyword),
         _ => Matcher::Contains(keyword),
     }
+}
+
+/// 统一大小写并去掉首尾空白与不可见字符。
+/// 部分邮件标题会带零宽字符（U+200B / U+FEFF 等），只 trim 空白时
+/// 「以此结尾」的 ends_with 会永远失败，而「包含 / 开头」仍然正常。
+fn normalize_title(raw: &str) -> String {
+    raw.trim_matches(|c: char| c.is_whitespace() || is_invisible(c))
+        .to_lowercase()
+}
+
+fn is_invisible(c: char) -> bool {
+    matches!(c, '\u{00ad}' | '\u{200b}'..='\u{200f}' | '\u{2060}' | '\u{feff}')
+}
+
+/// 策略返回了邮件却一条都没通过本地校验时，把标题样例打进日志：
+/// 服务端只做全文检索，标题是否真的以关键词结尾只能在这里看出来
+fn warn_subject_mismatch(
+    strategy: &Strategy,
+    items: &[MailItem],
+    matched: &[&MailItem],
+    matcher: &Matcher,
+    warned: &mut HashSet<String>,
+) {
+    if !matched.is_empty() || items.is_empty() {
+        return;
+    }
+    let key = format!("{}|{}|{}", strategy.id, strategy.match_mode, strategy.keyword);
+    if !warned.insert(key) {
+        return;
+    }
+    let samples: Vec<String> = items
+        .iter()
+        .take(3)
+        .map(|mail| format!("\"{}\"", mail.subject))
+        .collect();
+    logfile::warn(format!(
+        "[匹配] 策略「{}」返回 {} 条邮件，但没有标题满足「{}：{}」，本轮不会播报。样例标题：{}",
+        strategy.name,
+        items.len(),
+        matcher.label(),
+        matcher.keyword(),
+        samples.join(" / ")
+    ));
 }
 
 /// 客户端校验：发件人包含 + 转发/回复过滤 + 标题匹配。
@@ -558,7 +692,7 @@ fn matches_strategy(
 
 /// 标题是否以「转发 / 回复 + 中英文冒号」开头（允许前导空白、冒号前空格）
 fn is_reply_or_forward(subject: &str) -> bool {
-    let head = subject.trim_start();
+    let head = subject.trim_start_matches(|c: char| c.is_whitespace() || is_invisible(c));
     for prefix in ["转发", "回复"] {
         if let Some(rest) = head.strip_prefix(prefix) {
             let rest = rest.trim_start();
@@ -572,7 +706,17 @@ fn is_reply_or_forward(subject: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_reply_or_forward, Matcher};
+    use super::{group_duplicates, is_reply_or_forward, normalize_title, Matcher};
+    use crate::models::MailItem;
+
+    fn mail(id: &str, sender: &str, subject: &str) -> MailItem {
+        MailItem {
+            mail_id: id.into(),
+            sender: sender.into(),
+            subject: subject.into(),
+            summary: String::new(),
+        }
+    }
 
     #[test]
     fn detects_reply_and_forward_prefixes() {
@@ -604,5 +748,38 @@ mod tests {
         let suffix = Matcher::Suffix(keyword.into());
         assert!(suffix.is_match("主机 SOC_安全告警  "));
         assert!(!suffix.is_match("SOC_安全告警_HIPS"));
+    }
+
+    /// 部分邮件标题末尾带零宽字符：只 trim 空白会让「以此结尾」永远匹配不到
+    #[test]
+    fn ignores_invisible_characters_at_both_ends() {
+        assert_eq!(normalize_title("\u{200b}SOC_安全告警\u{feff}"), "soc_安全告警");
+        let suffix = Matcher::Suffix(normalize_title("SOC_安全告警"));
+        assert!(suffix.is_match("主机 SOC_安全告警\u{200b}"));
+        let prefix = Matcher::Prefix(normalize_title("SOC_安全告警"));
+        assert!(prefix.is_match("\u{feff}SOC_安全告警_HIPS"));
+        assert!(is_reply_or_forward("\u{200b}转发: SOC_安全告警"));
+    }
+
+    #[test]
+    fn merges_duplicates_by_sender_and_subject() {
+        let items = vec![
+            mail("mock:1", "a@b.com", "SOC_安全告警"),
+            mail("mock:2", "a@b.com", "SOC_安全告警"),
+            mail("mock:3", "C@B.com", "SOC_安全告警"),
+            mail("mock:4", "a@b.com", "SOC_安全告警_HIPS"),
+        ];
+        let (groups, merged) = group_duplicates(items.clone(), true);
+        assert_eq!(merged, 1);
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[0].len(), 2);
+        assert_eq!(groups[0][0].mail_id, "mock:1");
+        assert_eq!(groups[1][0].mail_id, "mock:3");
+        assert_eq!(groups[2][0].mail_id, "mock:4");
+
+        // 关闭合并：每条邮件各自成组
+        let (groups, merged) = group_duplicates(items, false);
+        assert_eq!(merged, 0);
+        assert_eq!(groups.len(), 4);
     }
 }

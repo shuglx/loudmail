@@ -72,6 +72,7 @@ fn validate(state: &AppState, input: &StrategyInput) -> Result<StrategyInput, St
         keyword,
         match_mode,
         filter_replies: input.filter_replies,
+        merge_duplicates: input.merge_duplicates,
         require_confirm: input.require_confirm,
         sound_id,
         play_count: input.play_count.clamp(1, 3),
@@ -92,6 +93,7 @@ fn build_export(state: &AppState) -> Result<StrategyExportFile, String> {
             keyword: item.keyword.clone(),
             match_mode: item.match_mode.clone(),
             filter_replies: item.filter_replies,
+            merge_duplicates: item.merge_duplicates,
             require_confirm: item.require_confirm,
             sound_id: item.sound_id.clone(),
             sound_name: item
@@ -233,6 +235,7 @@ pub fn cmd_import_strategies(
                 target.keyword = keyword;
                 target.match_mode = match_mode;
                 target.filter_replies = item.filter_replies;
+                target.merge_duplicates = item.merge_duplicates;
                 target.require_confirm = item.require_confirm;
                 target.sound_id = sound_id;
                 target.play_count = play_count;
@@ -253,6 +256,7 @@ pub fn cmd_import_strategies(
                     keyword,
                     match_mode,
                     filter_replies: item.filter_replies,
+                    merge_duplicates: item.merge_duplicates,
                     require_confirm: item.require_confirm,
                     sound_id,
                     play_count,
@@ -301,6 +305,7 @@ pub fn cmd_create_strategy(
         keyword: input.keyword,
         match_mode: input.match_mode,
         filter_replies: input.filter_replies,
+        merge_duplicates: input.merge_duplicates,
         require_confirm: input.require_confirm,
         sound_id: input.sound_id,
         play_count: input.play_count,
@@ -342,6 +347,7 @@ pub fn cmd_update_strategy(
     item.keyword = input.keyword;
     item.match_mode = input.match_mode;
     item.filter_replies = input.filter_replies;
+    item.merge_duplicates = input.merge_duplicates;
     item.require_confirm = input.require_confirm;
     item.sound_id = input.sound_id;
     item.play_count = input.play_count;

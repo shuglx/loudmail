@@ -445,6 +445,7 @@ mod tests {
             sender: "a@b.com".into(),
             subject: format!("告警 {id}"),
             summary: String::new(),
+            merged_count: 1,
             sound_name: "普通告警音".into(),
             play_count: 1,
             require_confirm,

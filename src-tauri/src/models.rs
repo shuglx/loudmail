@@ -7,6 +7,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_one() -> u32 {
+    1
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -150,6 +154,9 @@ pub struct Strategy {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    /// 合并同名高频邮件：同一次扫描内发件人 + 标题完全相同的邮件只播报一条
+    #[serde(default = "default_true")]
+    pub merge_duplicates: bool,
     /// 人工确认：命中后需在播报记录中确认，未确认时每轮轮询重复播报
     #[serde(default)]
     pub require_confirm: bool,
@@ -225,6 +232,8 @@ pub struct StrategyInput {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    #[serde(default = "default_true")]
+    pub merge_duplicates: bool,
     #[serde(default)]
     pub require_confirm: bool,
     pub sound_id: Option<String>,
@@ -255,6 +264,8 @@ pub struct StrategyExportItem {
     pub match_mode: String,
     #[serde(default = "default_true")]
     pub filter_replies: bool,
+    #[serde(default = "default_true")]
+    pub merge_duplicates: bool,
     #[serde(default)]
     pub require_confirm: bool,
     #[serde(default)]
@@ -315,6 +326,9 @@ pub struct HistoryRecord {
     pub subject: String,
     #[serde(default)]
     pub summary: String,
+    /// 同一次扫描内被合并进来的相同邮件条数：1 表示未合并
+    #[serde(default = "default_one")]
+    pub merged_count: u32,
     pub sound_name: String,
     pub play_count: u8,
     /// 命中时策略是否开启「人工确认」（快照：之后修改策略不影响已有记录）
@@ -538,6 +552,7 @@ mod tests {
         assert!(record.confirmed_at.is_none());
         assert!(record.sound_id.is_none());
         assert_eq!(record.rebroadcast_count, 0);
+        assert_eq!(record.merged_count, 1);
         assert!(record.last_broadcast_at.is_none());
     }
 
@@ -559,6 +574,7 @@ mod tests {
         }"#;
         let strategy: Strategy = serde_json::from_str(raw).unwrap();
         assert!(!strategy.require_confirm);
+        assert!(strategy.merge_duplicates);
     }
 
     /// 旧版游标是单个数字，无法判断来源，读取时留空 → 下一轮扫描按来源重新初始化
